@@ -48,7 +48,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # ================= CONFIGURARE BOT =================
-# Schimbat la .all() pentru a permite tracker-ul de invitații
+# Schimbat la all() pentru a permite tracker-ul de invitații
 intents = discord.Intents.all() 
 
 bot = commands.Bot(command_prefix="#", intents=intents)
@@ -83,6 +83,7 @@ W3_ID = 1450009480417902796
 # NOILE ID-URI PENTRU INVITES
 INVITE_LOG_CH_ID = 1473636271891943456
 INVITE_REWARD_ROLE_ID = 1482140556867010764
+MEMBER_ROLE_ALLOWED = 1438996505964052601 # Rolul care are voie să folosească comanda
 
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
@@ -428,7 +429,6 @@ async def setup_ticket(ctx):
 @is_staff_up()
 async def say(ctx, *, message: str):
     await ctx.message.delete()
-  
     await ctx.send(message)
 
 @bot.command()
@@ -570,10 +570,14 @@ async def get_inviter(member):
 
 @bot.command()
 async def invites(ctx, member: discord.Member = None):
-    # Verificare canal permise
-    if ctx.channel.id != BOT_COMMANDS_CH and ctx.channel.id != 1436559828859359373:
-        return # Nu răspunde deloc sau poți pune un mesaj temporar
+    # Verificare canal și rol permise conform cerinței
+    if ctx.channel.id != 1436559828859359373:
+        return
     
+    allowed_role = ctx.guild.get_role(MEMBER_ROLE_ALLOWED)
+    if allowed_role not in ctx.author.roles:
+        return
+
     target = member or ctx.author
     data = load_data()
     stats = data["invites"].get(str(target.id), {"total": 0, "fake": 0, "leaves": 0})
@@ -616,6 +620,7 @@ async def on_member_join(member):
             if log_ch: await log_ch.send(f"⚠️ {member.mention} a intrat (invitat de {inviter.mention}), dar contul este prea nou (**FAKE**).")
         else:
             data["invites"][inv_id]["total"] += 1
+            if "invited_list" not in data["invites"][inv_id]: data["invites"][inv_id]["invited_list"] = []
             data["invites"][inv_id]["invited_list"].append(member.id)
             if log_ch: await log_ch.send(f"✅ {member.mention} a intrat (invitat de {inviter.mention}). Reale: **{data['invites'][inv_id]['total']}**")
             
