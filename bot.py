@@ -128,7 +128,7 @@ class VerifyView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_btn_main", emoji="✅")
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_btn_main")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         unverified_role = interaction.guild.get_role(UNVERIFIED_ROLE_ID)
         verified_role = interaction.guild.get_role(VERIFIED_ROLE_ID)
@@ -396,12 +396,11 @@ async def setup_verify(ctx):
     """Comandă pentru a trimite panoul de verificare cu buton."""
     await ctx.message.delete()
     embed = discord.Embed(
-        title="❄️✨ VERIFICARE ✨❄️",
+        title="❄️✨ **BUN VENIT!** ✨❄️",
         description=(
-            "🎯 Apasă pe butonul de mai jos pentru a primi acces pe server!\n\n"
-            "➡️ Primești rolul: <@&1438996505964052601>\n"
-            "⬅️ Se scoate rolul: <@&1438997493374255155>\n\n"
-            "**📢 Nu uita să citești regulamentul!**"
+            "\n🎯 Pentru a avea **acces complet** la toate canalele și funcțiile serverului:\n"
+            "➡️ **APASĂ** pe butonul de VERIFY 🎁\n\n"
+            "📜 După **VERIFY**, **CITEȘTE** regulamentul aici: 📜 <#1325279589915955321>"
         ),
         color=0x2b2d31
     )
@@ -427,20 +426,7 @@ async def vmute(ctx, member: discord.Member, *, reason="Nespecificat"):
 
 @bot.command()
 @is_trial_up()
-async def vmute(ctx, member: discord.Member, *, reason="Nespecificat"):
-    if not member.voice:
-        return await ctx.send("❌ Membrul nu este pe un canal voice!", delete_after=5)
-    await member.edit(mute=True, reason=reason)
-    await ctx.send(f"🔇 {member.mention} a primit mute pe voice.", delete_after=5)
-    await send_sanction_log("Voice Mute", ctx.author, member, reason)
-
-@bot.command()
-@is_trial_up()
-async def vunmute(ctx, member: discord.Member):
-    if not member.voice:
-        return await ctx.send("❌ Membrul nu este pe un canal voice!", delete_after=5)
-    await member.edit(mute=False)
-    await ctx.send(f"🔊 {member.mention} a primit unmute pe voice.", delete_after=5)
+async def vunmute(ctx, member.mention} a primit unmute pe voice.", delete_after=5)
     await send_sanction_log("Voice Unmute", ctx.author, member, "Manual")
 
 @bot.command()
@@ -486,7 +472,7 @@ async def setup_ticket(ctx):
         "・reclami un membru obișuuit care încalcă regulamentul nostru\n\n"
         "🚫 ；**BAN REPORTS**\n"
         "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
-"👑 ；**CONTACT OWNER**\n"
+        "👑 ；**CONTACT OWNER**\n"
         "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
         "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
@@ -558,9 +544,7 @@ async def unban(ctx, id: int):
 @bot.command()
 @is_staff_up()
 async def clear(ctx, amount: int):
-    # Verificare daca are unul din rolurile pentru 100 mesaje
     can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
-    
     limit = 100 if can_clear_100 else 10
     
     if amount > limit:
@@ -707,19 +691,15 @@ async def on_guild_channel_create(channel):
 
 @bot.event
 async def on_member_join(member):
-    # --- LOGICĂ VERIFICARE ȘI STICKY ROLE ---
     data = load_data()
     unverif_role = member.guild.get_role(UNVERIFIED_ROLE_ID)
     verif_role = member.guild.get_role(VERIFIED_ROLE_ID)
     
     if member.id in data["verified_users"]:
-        # Dacă a fost deja verificat înainte să iasă
         if verif_role: await member.add_roles(verif_role)
     else:
-        # Dacă e nou sau nu a dat verify
         if unverif_role: await member.add_roles(unverif_role)
     
-    # --- LOGICĂ INVITE ---
     inviter = await get_inviter(member)
     if inviter and not inviter.bot:
         inv_id = str(inviter.id)
@@ -893,7 +873,8 @@ async def on_message(message):
             await message.channel.send(f"{CUSTOM_EMOJI} Salut maan {message.author.mention}, ce faci boss?")
 
     content_low = message.content.lower()
-    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):trial_role = message.guild.get_role(TRIAL_ID)
+    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):
+        trial_role = message.guild.get_role(TRIAL_ID)
         if not (trial_role and message.author.top_role.position >= trial_role.position):
             try:
                 await message.delete()
@@ -935,7 +916,7 @@ async def on_ready():
     bot.add_view(SelfRoleView())
     bot.add_view(ApplyView())
     bot.add_view(ApplyActionView(0))
-    bot.add_view(VerifyView()) # Persistență Verify
+    bot.add_view(VerifyView()) 
 
     channel = bot.get_channel(UPDATE_LOG_CH_ID)
     if channel:
