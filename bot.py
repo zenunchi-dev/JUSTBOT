@@ -37,12 +37,10 @@ if not TOKEN:
 def load_data():
     if not os.path.exists("data.json"):
         with open("data.json", "w") as f:
-            json.dump({"warnings": {}, "levels": {}, "invites": {}, "economy": {}, "stats": {}}, f)
+            json.dump({"warnings": {}, "levels": {}, "invites": {}}, f)
     with open("data.json") as f:
         data = json.load(f)
         if "invites" not in data: data["invites"] = {}
-        if "economy" not in data: data["economy"] = {}
-        if "stats" not in data: data["stats"] = {}
         return data
 
 def save_data(data):
@@ -50,7 +48,9 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # ================= CONFIGURARE BOT =================
+# Schimbat la all() pentru a permite tracker-ul de invitații
 intents = discord.Intents.all() 
+
 bot = commands.Bot(command_prefix="#", intents=intents)
 
 # Cache pentru invitații
@@ -80,18 +80,21 @@ WARN1_ROLE_ID = 1436538867850416289
 W2_ID = 1436538789311811624
 W3_ID = 1450009480417902796
 
+# NOILE ID-URI PENTRU INVITES
 INVITE_LOG_CH_ID = 1473636271891943456
 INVITE_REWARD_ROLE_ID = 1482140556867010764
-MEMBER_ROLE_ALLOWED = 1438996505964052601 
+MEMBER_ROLE_ALLOWED = 1438996505964052601 # Rolul care are voie să folosească comanda
 
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
 
-VERSION = "4.9"
+# --- CHANGELOG AUTOMAT ---
+VERSION = "4.8"
 CHANGES_LOG = """
-✅ **Profile UI**: Adăugată comanda #profile cu design modern.
-✅ **Restricții**: #profile funcționează doar pe bot-commands (excepție staff).
+✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
+✅ **Reward**: Rol automat la 25 de invitații valide.
+✅ **Comenzi**: Adăugată comanda `#invites` cu auto-ștergere (1 min).
 """
 
 XP_COOLDOWN = 8
@@ -202,6 +205,8 @@ class CloseTicketView(discord.ui.View):
         await asyncio.sleep(5)
         try: await interaction.channel.delete()
         except: pass
+
+# ================= SISTEM APPLY =================
 
 class ApplyActionView(discord.ui.View):
     def __init__(self, applicant_id: int):
@@ -336,59 +341,7 @@ def is_above_staff():
         return role_staff and ctx.author.top_role.position > role_staff.position
     return commands.check(pred)
 
-# ================= COMENZI NOUL PROFILE =================
-
-@bot.command()
-async def profile(ctx, member: discord.Member = None):
-    # Verificare Permisiuni Canal & Rol conform cerinței
-    is_staff = any(r.id == STAFF_ID for r in ctx.author.roles) or ctx.author.guild_permissions.administrator
-    
-    if not is_staff and ctx.channel.id != 1436559828859359373:
-        return # Ignoră comanda dacă nu e staff și nu e pe canalul corect
-
-    target = member or ctx.author
-    data = load_data()
-    uid = str(target.id)
-
-    # Date XP
-    lvl_data = data["levels"].get(uid, {"xp": 0, "level": 1})
-    xp = lvl_data["xp"]
-    lvl = lvl_data["level"]
-    next_lvl_xp = lvl * 100
-
-    # Date Economie & Stats (Simulate sau din baza de date)
-    cash = data["economy"].get(uid, random.randint(1000, 9999)) # Exemplu dacă nu ai sistem cash
-    messages = data["stats"].get(uid, {}).get("messages", 0)
-    voice_time = data["stats"].get(uid, {}).get("voice", "0h 0m")
-    quests = data["stats"].get(uid, {}).get("quests", 0)
-    
-    # Formatare Embed similar cu imaginea
-    embed = discord.Embed(color=0x1a1a1a)
-    embed.set_author(name=f"{target.name}", icon_url=target.display_avatar.url)
-    
-    # Status bar (Vizual)
-    bar_chat = "🟦" * int((xp/next_lvl_xp)*10) + "⬛" * (10 - int((xp/next_lvl_xp)*10))
-    
-    embed.description = (
-        f"**Chat XP** • Lvl {lvl} • {xp} / {next_lvl_xp}\n{bar_chat}\n\n"
-        f"**Voice XP** • Lvl 1 • 0 / 100\n"
-        f"🟪🟪⬛⬛⬛⬛⬛⬛⬛⬛\n\n"
-    )
-
-    embed.add_field(name="💵 ICED CASH", value=f"**{cash:,}**\nRank #??", inline=True)
-    embed.add_field(name="🎙️ VOICE TIME", value=f"**{voice_time}**\nRank #??", inline=True)
-    embed.add_field(name="💬 MESSAGES", value=f"**{messages}**\nRank #??", inline=True)
-    
-    embed.add_field(name="🗓️ JOINED", value=target.joined_at.strftime("%d %b %Y"), inline=True)
-    embed.add_field(name="👤 GENDER", value="Not set", inline=True)
-    embed.add_field(name="💍 MARRIED TO", value="None", inline=True)
-    
-    embed.set_thumbnail(url=target.display_avatar.url)
-    embed.set_footer(text=f"Profile ID: {target.id}")
-
-    await ctx.send(embed=embed)
-
-# ================= RESTUL COMENZILOR =================
+# ================= COMENZI =================
 
 @bot.command()
 @is_staff_up()
@@ -472,8 +425,7 @@ async def setup_ticket(ctx):
     embed = discord.Embed(description=text_panou, color=0x2b2d31)
     await ctx.send(embed=embed, view=TicketView())
 
-@bot.command()
-@is_staff_up()
+@bot.command()@is_staff_up()
 async def say(ctx, *, message: str):
     await ctx.message.delete()
     await ctx.send(message)
@@ -590,11 +542,66 @@ async def unmute(ctx, member: discord.Member):
     await ctx.send(f"🔊 {member.mention} unmute.", delete_after=5)
     await send_sanction_log("Unmute", ctx.author, member, "Manual")
 
+# ================= NOILE FUNCȚII INVITE =================
+
+async def get_inviter(member):
+    """Găsește cine a invitat membrul comparând utilizările invitațiilor."""
+    guild = member.guild
+    before_invs = invites_cache.get(guild.id, {})
+    try:
+        after_invs = await guild.invites()
+    except:
+        return None
+
+    inviter = None
+    for inv in after_invs:
+        if inv.code in before_invs:
+            if inv.uses > before_invs[inv.code]:
+                inviter = inv.inviter
+                break
+        elif inv.uses > 0: # Invitație nouă folosită instant
+            inviter = inv.inviter
+            break
+
+    # Update cache
+    invites_cache[guild.id] = {inv.code: inv.uses for inv in after_invs}
+    return inviter
+
+@bot.command()
+async def invites(ctx, member: discord.Member = None):
+    # Verificare canal și rol permise conform cerinței
+    if ctx.channel.id != 1436559828859359373:
+        return
+    
+    allowed_role = ctx.guild.get_role(MEMBER_ROLE_ALLOWED)
+    if allowed_role not in ctx.author.roles:
+        return
+
+    target = member or ctx.author
+    data = load_data()
+    stats = data["invites"].get(str(target.id), {"total": 0, "fake": 0, "leaves": 0})
+    
+    reale = stats["total"]
+    embed = discord.Embed(title=f"📩 Invites | {target.name}", color=0x2b2d31)
+    embed.add_field(name="✅ Reale", value=str(reale))
+    embed.add_field(name="❌ Fake", value=str(stats["fake"]))
+    embed.add_field(name="📤 Plecați", value=str(stats["leaves"]))
+    embed.set_footer(text=f"Total valid: {reale}")
+    
+    msg = await ctx.send(embed=embed)
+    
+    # Auto-ștergere după 1 minut
+    await asyncio.sleep(60)
+    try:
+        await ctx.message.delete()
+        await msg.delete()
+    except: pass
+
 # ================= EVENIMENTE =================
 
 @bot.event
 async def on_member_join(member):
-    # Tracker Invite
+    # --- TRACKER INVITE ---
     inviter = await get_inviter(member)
     if inviter and not inviter.bot:
         data = load_data()
@@ -602,35 +609,214 @@ async def on_member_join(member):
         if inv_id not in data["invites"]:
             data["invites"][inv_id] = {"total": 0, "fake": 0, "leaves": 0, "invited_list": []}
         
+        # Verificare FAKE (cont mai nou de 2 zile)
         is_fake = (datetime.datetime.now(UTC) - member.created_at).days < 2
+        
         log_ch = bot.get_channel(INVITE_LOG_CH_ID)
         
         if is_fake:
             data["invites"][inv_id]["fake"] += 1
-            if log_ch: await log_ch.send(f"⚠️ {member.mention} - FAKE (Cont nou).")
+            if log_ch: await log_ch.send(f"⚠️ {member.mention} a intrat (invitat de {inviter.mention}), dar contul este prea nou (**FAKE**).")
         else:
             data["invites"][inv_id]["total"] += 1
+            if "invited_list" not in data["invites"][inv_id]: data["invites"][inv_id]["invited_list"] = []
             data["invites"][inv_id]["invited_list"].append(member.id)
+            if log_ch: await log_ch.send(f"✅ {member.mention} a intrat (invitat de {inviter.mention}). Reale: **{data['invites'][inv_id]['total']}**")
+            
+            # Verificare Prag 25
             if data["invites"][inv_id]["total"] >= 25:
                 role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
                 inv_member = member.guild.get_member(inviter.id)
                 if role and inv_member: await inv_member.add_roles(role)
+        
         save_data(data)
 
+    # --- WELCOME ORIGINAL ---
     channel = bot.get_channel(WELCOME_CH_ID)
     if not channel: return
     welcome_msg = (f"🎉 Bun venit, <@&1438997493374255155> {member.mention}\n"
                   f"Ne bucurăm că ai intrat pe server! 🎁✨\n"
-                  f"Activează rolul <@&1438996505964052601>")
+                  f"Înainte să începi să vorbești cu ceilalți și să explorezi toate canalele, "
+                  f"te rugăm să treci prin verificare și să-ți activezi rolul <@&1438996505964052601>\n\n"
+                  f"Este un pas rapid și ne ajută să menținem comunitatea sigură și plăcută pentru toată lumea. ❄️🤍\n"
+                  f"Dacă ai nevoie de ajutor, nu ezita să întrebi! 💬")
     embed = discord.Embed(description=welcome_msg, color=0x2b2d31)
     embed.set_thumbnail(url=member.display_avatar.url)
     await channel.send(embed=embed)
 
 @bot.event
+async def on_member_remove(member):
+    # --- TRACKER LEAVE ---
+    data = load_data()
+    for inv_id, stats in data["invites"].items():
+        if member.id in stats.get("invited_list", []):
+            stats["invited_list"].remove(member.id)
+            stats["total"] -= 1
+            stats["leaves"] += 1
+            
+            log_ch = bot.get_channel(INVITE_LOG_CH_ID)
+            if log_ch: await log_ch.send(f"📤 {member.name} a părăsit serverul. Invitație scăzută de la <@{inv_id}>. (Total: {stats['total']})")
+            
+            # Scoate rolul dacă scade sub 25
+            if stats["total"] < 25:
+                role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
+                inv_member = member.guild.get_member(int(inv_id))
+                if role and inv_member and role in inv_member.roles:
+                    await inv_member.remove_roles(role)
+            break
+    save_data(data)
+
+    # --- LEAVE ORIGINAL ---
+    channel = bot.get_channel(WELCOME_CH_ID)
+    if not channel: return
+    leave_msg = (f"👋 **{member.name}** ai părăsit serverul.\n"
+                f"Ne pare rău să te vedem plecând și îți dorim numai bine mai departe. ❄️✨")
+    embed = discord.Embed(description=leave_msg, color=0x2b2d31)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    log_ch = bot.get_channel(LOG_CH_ID)
+    if not log_ch: return
+    if before.channel is None and after.channel is not None:
+        emb = discord.Embed(title="📥 Voice Join", description=f"{member.mention} a intrat pe {after.channel.mention}", color=0x43b581,timestamp=datetime.datetime.now(UTC))
+        await log_ch.send(emb)
+    elif before.channel is not None and after.channel is None:
+        emb = discord.Embed(title="📤 Voice Leave", description=f"{member.mention} a ieșit de pe **{before.channel.name}**", color=0xf04747, timestamp=datetime.datetime.now(UTC))
+        await log_ch.send(emb)
+
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot: return
+    log_ch = bot.get_channel(LOG_CH_ID)
+    if not log_ch: return
+    emb = discord.Embed(title="🗑️ Mesaj Șters", color=0xff4500, timestamp=datetime.datetime.now(UTC))
+    emb.add_field(name="Autor", value=message.author.mention)
+    emb.add_field(name="Conținut", value=message.content or "Fără text", inline=False)
+    await log_ch.send(embed=emb)
+
+@bot.command()
+@is_staff_up()
+async def addrole(ctx, member: discord.Member, role: discord.Role):
+    if role.position >= ctx.author.top_role.position:
+        return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
+    await member.add_roles(role)
+    await ctx.send(f"✅ Rol {role.name} adăugat.", delete_after=5)
+    await send_sanction_log("Role Add", ctx.author, member, f"Rol: {role.name}")
+
+@bot.command()
+@is_staff_up()
+async def removerole(ctx, member: discord.Member, role: discord.Role):
+    if role.position >= ctx.author.top_role.position:
+        return await ctx.send("❌ Nu poți scoate un rol ≥ cu al tău!", delete_after=5)
+    await member.remove_roles(role)
+    await ctx.send(f"✅ Rol {role.name} scos.", delete_after=5)
+    await send_sanction_log("Role Remove", ctx.author, member, f"Rol: {role.name}")
+
+@bot.command()
+@is_trial_up()
+async def warns(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    data = load_data()
+    count = data["warnings"].get(str(member.id), 0)
+    await ctx.send(f"🔍 {member.mention} are **{count}/3** warn-uri.", delete_after=8)
+
+@bot.command()
+async def comenzi(ctx):
+    if ctx.channel.id != STAFF_CMD_CHANNEL: 
+        return await ctx.send(f"❌ Doar în <#{STAFF_CMD_CHANNEL}>", delete_after=6)
+    embed = discord.Embed(title="📜 Liste commandes STAFF", color=0x2b2d31, description="Prefix: **#**\n\n**#ban** @user\n**#kick** @user\n**#mute** @user 1h\n**#vmute** @user\n**#unban** ID\n**#unmute** @user\n**#warn** @user\n**#unwarn** @user\n**#warns** @user\n**#clear** 50\n**#lock** / **#unlock**\n**#setup_ticket**\n**#setup_roles**\n**#setup_apply**")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def avatar(ctx, member: discord.Member = None):
+    if ctx.channel.id != BOT_COMMANDS_CH: 
+        return await ctx.send(f"❌ Doar în <#{BOT_COMMANDS_CH}>", delete_after=6)
+    member = member or ctx.author
+    embed = discord.Embed(title=f"Avatar • {member.name}", color=0x2b2d31)
+    embed.set_image(url=member.display_avatar.url)
+    await ctx.send(embed=embed, delete_after=30)
+
+@bot.command()
+async def serverinfo(ctx):
+    if ctx.channel.id != BOT_COMMANDS_CH: 
+        return await ctx.send(f"❌ Doar în <#{BOT_COMMANDS_CH}>", delete_after=6)
+    g = ctx.guild
+    embed = discord.Embed(title=f"{g.name} • Info", color=0x2b2d31)
+    embed.set_thumbnail(url=g.icon.url if g.icon else None)
+    embed.add_field(name="👥 Membri", value=g.member_count)
+    embed.add_field(name="🚀 Boost", value=g.premium_subscription_count)
+    embed.add_field(name="📅 Creat", value=g.created_at.strftime("%d %b %Y"))
+    await ctx.send(embed=embed, delete_after=25)
+
+@bot.event
+async def on_message(message):
+    if message.author.bot or not message.guild: return
+
+    if message.content.startswith("#"):
+        async def delete_msg():
+            await asyncio.sleep(10)
+            try: await message.delete()
+            except: pass
+        bot.loop.create_task(delete_msg())
+
+    if message.type in [discord.MessageType.premium_guild_subscription, discord.MessageType.premium_guild_tier_1, discord.MessageType.premium_guild_tier_2, discord.MessageType.premium_guild_tier_3]:
+        await send_boost_announcement(message.author, message.guild)
+
+    if message.channel.id == CHAT_CHANNEL_ID:
+        low = message.content.lower()
+        if low in ["neata", "neatza", "buna dimineata", "ntz"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Bună dimineața {message.author.mention}, ce mai faci? 😊")
+        elif low in ["nb", "noapte buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Noapte bună {message.author.mention}!")
+        elif low in ["salut", "sall", "ciao", "buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Salut maan {message.author.mention}, ce faci boss?")
+
+    content_low = message.content.lower()
+    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):
+        trial_role = message.guild.get_role(TRIAL_ID)
+        if not (trial_role and message.author.top_role.position >= trial_role.position):
+            try:
+                await message.delete()
+                data = load_data()
+                uid = str(message.author.id)
+                data["warnings"][uid] = data["warnings"].get(uid, 0) + 1
+                count = data["warnings"][uid]
+                save_data(data)
+                await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
+                if count >= 3:
+                    await message.author.ban(reason="3/3 Warns (Link-uri)")
+                else:
+                    warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
+                    role = message.guild.get_role(warn_roles[count-1])
+                    if role: await message.author.add_roles(role)
+                    await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
+            except: pass
+            return
+
+    uid = str(message.author.id)
+    now = time.time()
+    if uid not in last_xp_time or now - last_xp_time[uid] > XP_COOLDOWN:
+        last_xp_time[uid] = now
+        data = load_data()
+        if uid not in data["levels"]:
+            data["levels"][uid] = {"xp": 0, "level": 1}
+        data["levels"][uid]["xp"] += 10
+        xp, lvl = data["levels"][uid]["xp"], data["levels"][uid]["level"]
+        if xp >= lvl * 100:
+            data["levels"][uid]["level"] += 1
+            data["levels"][uid]["xp"] = xp - (lvl * 100)
+            await message.channel.send(f"🎉 {message.author.mention} nivel **{lvl+1}**!", delete_after=12)
+        save_data(data)
+    await bot.process_commands(message)
+
+@bot.event
 async def on_ready():
     print(f"✅ {bot.user} ONLINE")
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Profiles & Helper Apply"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tickets & Helper Apply"))
     
+    # Init cache la pornire
     for guild in bot.guilds:
         try:
             invs = await guild.invites()
@@ -645,50 +831,17 @@ async def on_ready():
 
     channel = bot.get_channel(UPDATE_LOG_CH_ID)
     if channel:
-        await channel.purge(limit=1)
-        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff00)
-        embed.add_field(name="📝 Modificări:", value=CHANGES_LOG)
-        await channel.send(embed=embed)
-
-@bot.event
-async def on_message(message):
-    if message.author.bot or not message.guild: return
-
-    # Update Statistics for Profile
-    data = load_data()
-    uid = str(message.author.id)
-    if uid not in data["stats"]: data["stats"][uid] = {"messages": 0, "voice": "0h 0m", "quests": 0}
-    data["stats"][uid]["messages"] += 1
-    save_data(data)
-
-    # XP System
-    now = time.time()
-    if uid not in last_xp_time or now - last_xp_time[uid] > XP_COOLDOWN:
-        last_xp_time[uid] = now
-        if uid not in data["levels"]: data["levels"][uid] = {"xp": 0, "level": 1}
-        data["levels"][uid]["xp"] += 10
-        xp, lvl = data["levels"][uid]["xp"], data["levels"][uid]["level"]
-        if xp >= lvl * 100:
-            data["levels"][uid]["level"] += 1
-            data["levels"][uid]["xp"] = 0
-            await message.channel.send(f"🎉 {message.author.mention} nivel **{lvl+1}**!", delete_after=10)
-        save_data(data)
-
-    await bot.process_commands(message)
-
-async def get_inviter(member):
-    guild = member.guild
-    before_invs = invites_cache.get(guild.id, {})
-    try:
-        after_invs = await guild.invites()
-    except: return None
-    inviter = None
-    for inv in after_invs:
-        if inv.code in before_invs and inv.uses > before_invs[inv.code]:
-            inviter = inv.inviter
-            break
-    invites_cache[guild.id] = {inv.code: inv.uses for inv in after_invs}
-    return inviter
+        await channel.purge(limit=15)
+        current_time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff00, timestamp=datetime.datetime.now(UTC))
+        embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
+        embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
+        
+        file_path = "bot.py"
+        if os.path.exists(file_path):
+            await channel.send(embed=embed, file=discord.File(file_path))
+        else:
+            await channel.send(embed=embed)
 
 keep_alive()
 bot.run(TOKEN)
