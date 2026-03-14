@@ -90,11 +90,11 @@ MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/146184343
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
 
-VERSION = "5.0"
+VERSION = "4.9"
 CHANGES_LOG = """
+✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
+✅ **Reward**: Rol automat la 25 de invitații valide.
 ✅ **Ban Role Overwrite**: Rolul de ban blochează acum automat vizibilitatea canalelor.
-✅ **Sync Automatic**: Canalele noi primesc automat restricția de vizibilitate pentru ban.
-✅ **Comenzi Staff**: Logică de ban/unban actualizată pentru noul sistem de rol.
 """
 
 XP_COOLDOWN = 8
@@ -872,7 +872,7 @@ async def on_ready():
         try:
             invs = await guild.invites()
             invites_cache[guild.id] = {inv.code: inv.uses for inv in invs}
-            # Sincronizare la pornire pentru a asigura blocarea canalelor
+            # Sincronizare la pornire
             await sync_ban_role_permissions(guild)
         except: pass
 
@@ -886,7 +886,7 @@ async def on_ready():
     if channel:
         await channel.purge(limit=15)
         current_time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-        embed = discod.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff00, timestamp=datetime.datetime.now(UTC))
+        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff00, timestamp=datetime.datetime.now(UTC))
         embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
         embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
         
