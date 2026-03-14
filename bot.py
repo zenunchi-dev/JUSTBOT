@@ -9,7 +9,6 @@ import datetime
 import json
 import random
 from datetime import UTC, timedelta
-import time  # pentru cooldown XP
 from flask import Flask
 from threading import Thread
 
@@ -37,7 +36,7 @@ if not TOKEN:
 def load_data():
     if not os.path.exists("data.json"):
         with open("data.json", "w") as f:
-            json.dump({"warnings": {}, "levels": {}, "invites": {}}, f)
+            json.dump({"warnings": {}, "invites": {}}, f)
     with open("data.json") as f:
         data = json.load(f)
         if "invites" not in data: data["invites"] = {}
@@ -103,9 +102,6 @@ CHANGES_LOG = """
 ✅ **Reward**: Rol automat la 25 de invitații valide.
 ✅ **Ban Role Overwrite**: Rolul de ban blochează acum automat vizibilitatea canalelor.
 """
-
-XP_COOLDOWN = 8
-last_xp_time = {}  
 
 # ================= FUNCȚIE SYNC PERMISIUNI BAN =================
 
@@ -435,6 +431,7 @@ async def setup_ticket(ctx):
         "・reclami un membru obișuuit care încalcă regulamentul nostru\n\n"
         "🚫 ；**BAN REPORTS**\n"
         "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
+  
         "👑 ；**CONTACT OWNER**\n"
         "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
@@ -854,20 +851,6 @@ async def on_message(message):
             except: pass
             return
 
-    uid = str(message.author.id)
-    now = time.time()
-    if uid not in last_xp_time or now - last_xp_time[uid] > XP_COOLDOWN:
-        last_xp_time[uid] = now
-        data = load_data()
-        if uid not in data["levels"]:
-            data["levels"][uid] = {"xp": 0, "level": 1}
-        data["levels"][uid]["xp"] += 10
-        xp, lvl = data["levels"][uid]["xp"], data["levels"][uid]["level"]
-        if xp >= lvl * 100:
-            data["levels"][uid]["level"] += 1
-            data["levels"][uid]["xp"] = xp - (lvl * 100)
-            await message.channel.send(f"🎉 {message.author.mention} nivel **{lvl+1}**!", delete_after=12)
-        save_data(data)
     await bot.process_commands(message)
 
 @bot.event
