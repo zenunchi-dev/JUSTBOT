@@ -4,7 +4,6 @@ load_dotenv()
 
 import discord
 from discord.ext import commands
-from discord import app_commands
 import asyncio
 import datetime
 import json
@@ -26,6 +25,12 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
+# ===================================================
+
+# ================= Încărcare token =================
+TOKEN = os.getenv("DISCORD_TOKEN")
+if not TOKEN:
+    raise ValueError("❌ DISCORD_TOKEN nu este setat în variabile de mediu!")
 
 # ================= BAZA DE DATE =================
 def load_data():
@@ -43,62 +48,266 @@ def save_data(data):
 
 # ================= CONFIGURARE BOT =================
 intents = discord.Intents.all() 
-TOKEN = os.getenv("DISCORD_TOKEN")
 
-class MyBot(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix="#", intents=intents)
+bot = commands.Bot(command_prefix="#", intents=intents)
 
-    async def setup_hook(self):
-        self.add_view(TicketView())
-        self.add_view(CloseTicketView())
-        self.add_view(SelfRoleView())
-        self.add_view(ApplyView())
-        self.add_view(ApplyActionView(0))
-
-bot = MyBot()
+# Cache pentru invitații
 invites_cache = {}
 
-# ================= ID-URI =================
+# ================= ID-URI ACTUALIZATE =================
 TRIAL_ID = 1444684277110542368
 STAFF_ID = 1325279044396126261
 REJECT_ROLE_ID = 1477702698936701019
 BOOST_ROLE_MIN = 1411137733975347293  
 BOOST_CH_ID = 1476419627482611762      
 BENEFITS_CH_ID = 1476425405304012843   
+
 LOG_CH_ID = 1444796054313766922         
 BAN_LOG_CH_ID = 1436891992150769664     
 MOD_LOG_CH_ID = 1464383652866556039     
+
 WELCOME_CH_ID = 1325279589915955321 
 BOT_COMMANDS_CH = 1436559828859359373
 CHAT_CHANNEL_ID = 1436554745622827258
 STAFF_CMD_CHANNEL = 1449824932371632248
 UPDATE_LOG_CH_ID = 1477448913827921922 
+
 TICKET_CATEGORY_ID = 1444684157833056256 
+
 WARN1_ROLE_ID = 1436538867850416289
 W2_ID = 1436538789311811624
 W3_ID = 1450009480417902796
+
+# NOILE ID-URI PENTRU INVITES
 INVITE_LOG_CH_ID = 1473636271891943456
 INVITE_REWARD_ROLE_ID = 1482140556867010764
 MEMBER_ROLE_ALLOWED = 1438996505964052601 
-BAN_ROLE_ID = 1482386779846869094 
-CLEAR_100_ROLES = [1437845412383031467, 1411137733975347293, 1436506319459844249, 1473101230103330925, 1476422451545116853, 1478173655832727672, 1478173861144035449]
+
+BAN_ROLE_ID = 1482386779846869094 # Rolul care se dă în loc de ban
+
+# Roluri care pot da clear pana la 100
+CLEAR_100_ROLES = [
+    1437845412383031467, 1411137733975347293, 1436506319459844249,
+    1473101230103330925, 1476422451545116853, 1478173655832727672,
+    1478173861144035449
+]
 
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
-VERSION = "4.9"
-CHANGES_LOG = "✅ Conversie completă la Slash Commands (/)"
 
-# ================= FUNCȚII LOGICĂ =================
+VERSION = "4.9"
+CHANGES_LOG = """
+✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
+✅ **Reward**: Rol automat la 25 de invitații valide.
+✅ **Ban Role Overwrite**: Rolul de ban blochează acum automat vizibilitatea canalelor.
+"""
+
+# ================= FUNCȚIE SYNC PERMISIUNI BAN =================
 
 async def sync_ban_role_permissions(guild):
+    """Setează automat permisiunea de a NU vedea canalele pentru rolul de ban."""
     role = guild.get_role(BAN_ROLE_ID)
-    if not role: return
+    if not role:
+        return
+    
     for channel in guild.channels:
         if channel.overwrites_for(role).read_messages is not False:
-            try: await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
-            except: continue
+            try:
+                await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+            except:
+                continue
+
+# ================= CLASE UI PERSISTENTE =================
+
+class SelfRoleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def toggle_role(self, interaction: discord.Interaction, role_id: int):
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            return await interaction.response.send_message("❌ Rolul nu a fost găsit!", ephemeral=True)
+        
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"🗑️ Rolul {role.name} a fost scos.", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ Rolul {role.name} a fost adăugat!", ephemeral=True)
+
+    @discord.ui.button(label="18+", style=discord.ButtonStyle.secondary, custom_id="role_18plus", emoji="<:18Plus:1455072960812548157>")
+    async def role_18plus(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455073585306800128)
+
+    @discord.ui.button(label="Under 18", style=discord.ButtonStyle.secondary, custom_id="role_under18", emoji="<:Under18:1455078800307126334>")
+    async def role_under18(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455080987146064014)
+
+    @discord.ui.button(label="Girl", style=discord.ButtonStyle.secondary, custom_id="role_girl", emoji="<:emoji_15:1448074655775719444>")
+    async def role_girl(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455080720409034907)
+
+    @discord.ui.button(label="Boy", style=discord.ButtonStyle.secondary, custom_id="role_boy", emoji="<:emoji_16:1448074879961268451>")
+    async def role_boy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455079548445130883)
+
+    @discord.ui.button(label="Giveaway", style=discord.ButtonStyle.secondary, custom_id="role_giveaway", emoji="<a:purplepresent:1455082484604604531>")
+    async def role_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455081282009694258)
+
+    @discord.ui.button(label="Wake Up", style=discord.ButtonStyle.secondary, custom_id="role_wakeup", emoji="<:__:1451889127581548648>")
+    async def role_wakeup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.toggle_role(interaction, 1455082758094327922)
+
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def create_ticket(self, interaction: discord.Interaction, category_name: str):
+        guild = interaction.guild
+        staff_role = guild.get_role(STAFF_ID)
+        
+        channel_name = f"{category_name}-{interaction.user.name.lower()}"
+        existing_channel = discord.utils.get(guild.channels, name=channel_name)
+        
+        if existing_channel:
+            return await interaction.response.send_message(f"❌ Ai deja un ticket de acest tip deschis: {existing_channel.mention}", ephemeral=True)
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        category = guild.get_channel(TICKET_CATEGORY_ID)
+        channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
+        
+        embed = discord.Embed(
+            title=f"🎫 Ticket: {category_name.upper()}", 
+            description=f"Salut {interaction.user.mention}!\nAi deschis un ticket pentru: **{category_name.replace('-', ' ')}**.\nEchipa Staff va prelua cererea ta în cel mai scurt timp.\n\nFolosește butonul de mai jos pentru a închide tichetul.", 
+            color=0x2b2d31
+        )
+        await channel.send(embed=embed, view=CloseTicketView())
+        await interaction.response.send_message(f"✅ Ticket creat: {channel.mention}", ephemeral=True)
+
+    @discord.ui.button(label="REPORT STAFF", style=discord.ButtonStyle.secondary, custom_id="t_staff", emoji="⚠️")
+    async def t_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "staff")
+
+    @discord.ui.button(label="REPORT MEMBER", style=discord.ButtonStyle.secondary, custom_id="t_member", emoji="👥")
+    async def t_member(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "member")
+
+    @discord.ui.button(label="BAN REPORTS", style=discord.ButtonStyle.secondary, custom_id="t_ban", emoji="🚫")
+    async def t_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "ban")
+
+    @discord.ui.button(label="CONTACT OWNER", style=discord.ButtonStyle.secondary, custom_id="t_owner", emoji="👑")
+    async def t_owner(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "owner")
+
+    @discord.ui.button(label="INFO & OTHERS", style=discord.ButtonStyle.secondary, custom_id="t_info", emoji="❓")
+    async def t_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "info")
+
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Închide Ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket", emoji="🔒")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Tichetul se va închide în 5 secunde...")
+        await asyncio.sleep(5)
+        try: await interaction.channel.delete()
+        except: pass
+
+# ================= SISTEM APPLY =================
+
+class ApplyActionView(discord.ui.View):
+    def __init__(self, applicant_id: int):
+        super().__init__(timeout=None)
+        self.applicant_id = applicant_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        staff_role = interaction.guild.get_role(STAFF_ID)
+        if not staff_role or interaction.user.top_role.position <= staff_role.position:
+            await interaction.response.send_message("❌ Doar conducerea poate folosi aceste butoane!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Acceptă (Trial)", style=discord.ButtonStyle.success, custom_id="apply_accept_btn")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id)
+        role_trial = guild.get_role(TRIAL_ID)
+        
+        if member and role_trial:
+            await member.add_roles(role_trial)
+            try: await member.send(f"🎉 Cererea ta de Helper pe **{guild.name}** a fost acceptată! Bine ai venit.")
+            except: pass
+            await interaction.response.send_message(f"✅ {member.mention} a primit gradul de Trial. Canalul se va închide în 10 secunde.")
+            await asyncio.sleep(10)
+            await interaction.channel.delete()
+        else:
+            await interaction.response.send_message("❌ Utilizatorul nu mai este pe server sau rolul Trial nu există.", ephemeral=True)
+
+    @discord.ui.button(label="Respinge", style=discord.ButtonStyle.danger, custom_id="apply_deny_btn")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id)
+        role_reject = guild.get_role(REJECT_ROLE_ID)
+        
+        if member:
+            if role_reject:
+                await member.add_roles(role_reject)
+            try: await member.send(f"❌ Cererea ta de Helper pe **{interaction.guild.name}** a fost respinsă.")
+            except: pass
+        await interaction.response.send_message("🚫 Cerere respinsă. Canalul se va închide în 5 secunde.")
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
+
+class ApplyModal(discord.ui.Modal, title="Formular Aplicare Helper"):
+    nume = discord.ui.TextInput(label="Nume și Vârstă", placeholder="Ex: Andrei, 19 ani", min_length=3)
+    experienta = discord.ui.TextInput(label="Experiență", style=discord.TextStyle.paragraph, placeholder="Unde ai mai fost Staff?")
+    motiv = discord.ui.TextInput(label="De ce tu?", style=discord.TextStyle.paragraph, placeholder="Cu ce poți ajuta comunitatea?")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        staff_role = guild.get_role(STAFF_ID)
+        
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        category = guild.get_channel(TICKET_CATEGORY_ID)
+        channel = await guild.create_text_channel(f"apply-{interaction.user.name}", category=category, overwrites=overwrites)
+        
+        embed = discord.Embed(title=f"📝 Cerere Helper: {interaction.user.name}", color=0x3498db, timestamp=datetime.datetime.now(UTC))
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.add_field(name="👤 Aplicant", value=interaction.user.mention)
+        embed.add_field(name="🎂 Nume/Vârstă", value=self.nume.value, inline=False)
+        embed.add_field(name="🧠 Experiență", value=self.experienta.value, inline=False)
+        embed.add_field(name="✨ Motiv", value=self.motiv.value, inline=False)
+        
+        await channel.send(content=f"🔔 <@&{STAFF_ID}>", embed=embed, view=ApplyActionView(interaction.user.id))
+        await interaction.response.send_message(f"✅ Canalul tău de aplicare a fost creat: {channel.mention}", ephemeral=True)
+
+class ApplyView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="HELPER APPLY", style=discord.ButtonStyle.success, custom_id="main_apply_btn", emoji="📝")
+    async def apply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ApplyModal())
+
+# ================= FUNCȚII AJUTĂTOARE =================
 
 async def send_boost_announcement(member, guild):
     channel = bot.get_channel(BOOST_CH_ID)
@@ -130,216 +339,524 @@ async def send_sanction_log(action, staff, member, reason="Nespecificat", durati
     embed.set_footer(text=f"ID: {member.id if hasattr(member, 'id') else 'N/A'}")
     await channel.send(embed=embed)
 
-# ================= CLASE UI =================
+# ================= VERIFICĂRI PERMISIUNI =================
 
-class SelfRoleView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    async def toggle_role(self, interaction: discord.Interaction, role_id: int):
-        role = interaction.guild.get_role(role_id)
-        if not role: return await interaction.response.send_message("❌ Rolul nu a fost găsit!", ephemeral=True)
-        if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"🗑️ Rolul {role.name} a fost scos.", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"✅ Rolul {role.name} a fost adăugat!", ephemeral=True)
+def is_trial_up():
+    async def pred(ctx):
+        role = ctx.guild.get_role(TRIAL_ID)
+        return role and ctx.author.top_role.position >= role.position
+    return commands.check(pred)
 
-    @discord.ui.button(label="18+", style=discord.ButtonStyle.secondary, custom_id="role_18plus", emoji="<:18Plus:1455072960812548157>")
-    async def role_18plus(self, interaction, button): await self.toggle_role(interaction, 1455073585306800128)
-    @discord.ui.button(label="Under 18", style=discord.ButtonStyle.secondary, custom_id="role_under18", emoji="<:Under18:1455078800307126334>")
-    async def role_under18(self, interaction, button): await self.toggle_role(interaction, 1455080987146064014)
-    @discord.ui.button(label="Girl", style=discord.ButtonStyle.secondary, custom_id="role_girl", emoji="<:emoji_15:1448074655775719444>")
-    async def role_girl(self, interaction, button): await self.toggle_role(interaction, 1455080720409034907)
-    @discord.ui.button(label="Boy", style=discord.ButtonStyle.secondary, custom_id="role_boy", emoji="<:emoji_16:1448074879961268451>")
-    async def role_boy(self, interaction, button): await self.toggle_role(interaction, 1455079548445130883)
-    @discord.ui.button(label="Giveaway", style=discord.ButtonStyle.secondary, custom_id="role_giveaway", emoji="<a:purplepresent:1455082484604604531>")
-    async def role_giveaway(self, interaction, button): await self.toggle_role(interaction, 1455081282009694258)
-    @discord.ui.button(label="Wake Up", style=discord.ButtonStyle.secondary, custom_id="role_wakeup", emoji="<:__:1451889127581548648>")
-    async def role_wakeup(self, interaction, button): await self.toggle_role(interaction, 1455082758094327922)
+def is_staff_up():
+    async def pred(ctx):
+        role = ctx.guild.get_role(STAFF_ID)
+        return role and ctx.author.top_role.position >= role.position
+    return commands.check(pred)
 
-class TicketView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    async def create_ticket(self, interaction: discord.Interaction, category_name: str):
-        guild = interaction.guild
-        staff_role = guild.get_role(STAFF_ID)
-        channel_name = f"{category_name}-{interaction.user.name.lower()}"
-        existing_channel = discord.utils.get(guild.channels, name=channel_name)
-        if existing_channel: return await interaction.response.send_message(f"❌ Ai deja un ticket deschis: {existing_channel.mention}", ephemeral=True)
-        overwrites = {guild.default_role: discord.PermissionOverwrite(read_messages=False), interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True), guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)}
-        if staff_role: overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        category = guild.get_channel(TICKET_CATEGORY_ID)
-        channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
-        embed = discord.Embed(title=f"🎫 Ticket: {category_name.upper()}", description=f"Salut {interaction.user.mention}!", color=0x2b2d31)
-        await channel.send(embed=embed, view=CloseTicketView())
-        await interaction.response.send_message(f"✅ Ticket creat: {channel.mention}", ephemeral=True)
+def is_above_staff():
+    async def pred(ctx):
+        role_staff = ctx.guild.get_role(STAFF_ID)
+        return role_staff and ctx.author.top_role.position > role_staff.position
+    return commands.check(pred)
 
-    @discord.ui.button(label="REPORT STAFF", style=discord.ButtonStyle.secondary, custom_id="t_staff", emoji="⚠️")
-    async def t_staff(self, interaction, button): await self.create_ticket(interaction, "staff")
-    @discord.ui.button(label="REPORT MEMBER", style=discord.ButtonStyle.secondary, custom_id="t_member", emoji="👥")
-    async def t_member(self, interaction, button): await self.create_ticket(interaction, "member")
-    @discord.ui.button(label="BAN REPORTS", style=discord.ButtonStyle.secondary, custom_id="t_ban", emoji="🚫")
-    async def t_ban(self, interaction, button): await self.create_ticket(interaction, "ban")
-    @discord.ui.button(label="CONTACT OWNER", style=discord.ButtonStyle.secondary, custom_id="t_owner", emoji="👑")
-    async def t_owner(self, interaction, button): await self.create_ticket(interaction, "owner")
-    @discord.ui.button(label="INFO & OTHERS", style=discord.ButtonStyle.secondary, custom_id="t_info", emoji="❓")
-    async def t_info(self, interaction, button): await self.create_ticket(interaction, "info")
-
-class CloseTicketView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="Închide Ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket", emoji="🔒")
-    async def close_ticket(self, interaction, button):
-        await interaction.response.send_message("Tichetul se va închide în 5 secunde...")
-        await asyncio.sleep(5)
-        try: await interaction.channel.delete()
-        except: pass
-
-class ApplyActionView(discord.ui.View):
-    def __init__(self, applicant_id: int):
-        super().__init__(timeout=None)
-        self.applicant_id = applicant_id
-    @discord.ui.button(label="Acceptă (Trial)", style=discord.ButtonStyle.success, custom_id="apply_accept_btn")
-    async def accept(self, interaction, button):
-        member = interaction.guild.get_member(self.applicant_id)
-        role = interaction.guild.get_role(TRIAL_ID)
-        if member and role:
-            await member.add_roles(role)
-            await interaction.response.send_message(f"✅ {member.mention} a primit Trial.")
-            await asyncio.sleep(5)
-            await interaction.channel.delete()
-    @discord.ui.button(label="Respinge", style=discord.ButtonStyle.danger, custom_id="apply_deny_btn")
-    async def deny(self, interaction, button):
-        await interaction.response.send_message("🚫 Respins.")
-        await asyncio.sleep(5)
-        await interaction.channel.delete()
-
-class ApplyModal(discord.ui.Modal, title="Formular Aplicare Helper"):
-    nume = discord.ui.TextInput(label="Nume și Vârstă")
-    experienta = discord.ui.TextInput(label="Experiență", style=discord.TextStyle.paragraph)
-    motiv = discord.ui.TextInput(label="De ce tu?", style=discord.TextStyle.paragraph)
-    async def on_submit(self, interaction):
-        guild = interaction.guild
-        category = guild.get_channel(TICKET_CATEGORY_ID)
-        channel = await guild.create_text_channel(f"apply-{interaction.user.name}", category=category)
-        embed = discord.Embed(title=f"📝 Cerere Helper: {interaction.user.name}")
-        embed.add_field(name="Nume", value=self.nume.value)
-        embed.add_field(name="Experiență", value=self.experienta.value)
-        await channel.send(embed=embed, view=ApplyActionView(interaction.user.id))
-        await interaction.response.send_message("✅ Cerere trimisă!", ephemeral=True)
-
-class ApplyView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="HELPER APPLY", style=discord.ButtonStyle.success, custom_id="main_apply_btn", emoji="📝")
-    async def apply_button(self, interaction, button): await interaction.response.send_modal(ApplyModal())
-
-# ================= SLASH COMMANDS =================
+# ================= COMENZI =================
 
 @bot.command()
-@commands.is_owner()
-async def sync(ctx):
-    await bot.tree.sync()
-    await ctx.send("✅ Slash Commands sincronizate!")
-
-@bot.tree.command(name="kick", description="Kick un membru")
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Nespecificat"):
-    if interaction.user.top_role.position < interaction.guild.get_role(STAFF_ID).position:
-        return await interaction.response.send_message("❌ Nu ești staff!", ephemeral=True)
+@is_staff_up()
+async def kick(ctx, member: discord.Member, *, reason="Nespecificat"):
+    if member.top_role >= ctx.author.top_role:
+        return await ctx.send("❌ Nu poți da kick cuiva cu grad egal sau mai mare!", delete_after=5)
     await member.kick(reason=reason)
-    await interaction.response.send_message(f"✅ {member.name} a primit kick.")
-    await send_sanction_log("Kick", interaction.user, member, reason)
+    await ctx.send(f"✅ {member.name} a primit kick.", delete_after=5)
+    await send_sanction_log("Kick", ctx.author, member, reason)
 
-@bot.tree.command(name="ban", description="Ban (Rol) un membru")
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Nespecificat"):
-    role = interaction.guild.get_role(BAN_ROLE_ID)
-    await member.add_roles(role)
-    await sync_ban_role_permissions(interaction.guild)
-    await interaction.response.send_message(f"✅ {member.mention} banat.")
-    await send_sanction_log("Ban (Role)", interaction.user, member, reason)
+@bot.command()
+@is_trial_up()
+async def vmute(ctx, member: discord.Member, *, reason="Nespecificat"):
+    if not member.voice:
+        return await ctx.send("❌ Membrul nu este pe un canal voice!", delete_after=5)
+    await member.edit(mute=True, reason=reason)
+    await ctx.send(f"🔇 {member.mention} a primit mute pe voice.", delete_after=5)
+    await send_sanction_log("Voice Mute", ctx.author, member, reason)
 
-@bot.tree.command(name="mute", description="Timeout un membru")
-async def mute(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "Nespecificat"):
-    await member.timeout(timedelta(minutes=minutes), reason=reason)
-    await interaction.response.send_message(f"🔇 {member.mention} mute {minutes}m.")
-    await send_sanction_log("Mute", interaction.user, member, reason, f"{minutes}m")
+@bot.command()
+@is_trial_up()
+async def vunmute(ctx, member: discord.Member):
+    if not member.voice:
+        return await ctx.send("❌ Membrul nu este pe un canal voice!", delete_after=5)
+    await member.edit(mute=False)
+    await ctx.send(f"🔊 {member.mention} a primit unmute pe voice.", delete_after=5)
+    await send_sanction_log("Voice Unmute", ctx.author, member, "Manual")
 
-@bot.tree.command(name="unmute", description="Scoate timeout")
-async def unmute(interaction: discord.Interaction, member: discord.Member):
-    await member.timeout(None)
-    await interaction.response.send_message(f"🔊 {member.mention} unmute.")
+@bot.command()
+@is_above_staff()
+async def setup_apply(ctx):
+    await ctx.message.delete()
+    embed = discord.Embed(
+        title="✨ RECRUTARE HELPER ✨",
+        description="Vrei să te alături echipei noastre? Apasă butonul de mai jos!\n\nSe va deschide un **canal privat** unde vei completa formularul.",
+        color=0x2ecc71
+    )
+    await ctx.send(embed=embed, view=ApplyView())
 
-@bot.tree.command(name="clear", description="Șterge mesaje")
-async def clear(interaction: discord.Interaction, amount: int):
-    can_clear_100 = any(role.id in CLEAR_100_ROLES for role in interaction.user.roles)
+@bot.command()
+@is_above_staff()
+async def setup_roles(ctx):
+    await ctx.message.delete()
+    descriere_panou = (
+        "🎭 **ALEGE-ȚI ROLURILE**\n"
+        "Apasă pe butoanele de mai jos pentru a-ți gestiona rolurile:\n"
+        "✅ Apasă o dată pentru a primi rolul.\n"
+        "🗑️ Apasă încă o dată pe același buton pentru a-l scoate.\n\n"
+        "```🎭 SELF ROLES\n\n"
+        "+18 ; 18+\n"
+        "-18 ; UNDER 18\n"
+        "🔞 ; GIRL\n"
+        "🔞 ; BOY\n"
+        "🎁 ; GIVEAWAY\n"
+        "✨ ; WAKE UP```\n\n"
+        "📢 ; **Alege-ți rolurile preferate apăsând pe butoanele de mai jos!**"
+    )
+    embed = discord.Embed(description=descriere_panou, color=0x2b2d31)
+    await ctx.send(embed=embed, view=SelfRoleView())
+
+@bot.command()
+@is_above_staff()
+async def setup_ticket(ctx):
+    await ctx.message.delete()
+    text_panou = (
+        "⚠️ ；**REPORT STAFF**\n"
+        "・reclami un membru staff care face abuz sau încalcă regulamentul\n\n"
+        "👥 ；**REPORT MEMBER**\n"
+        "・reclami un membru obișuuit care încalcă regulamentul nostru\n\n"
+        "🚫 ；**BAN REPORTS**\n"
+        "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
+"👑 ；**CONTACT OWNER**\n"
+        "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
+        "・semnalezi un bug, probleme cu un manager, urgențe\n"
+        "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
+        "❓ ；**INFO & OTHERS**\n"
+        "・alte întrebări legate de server, probleme care nu apar mai sus\n\n"
+        "**📢 ；Crearea ticketelor în batjocură/glumă se pedepsește!**\n"
+        "**📢 ；Nu ai voie să partajezi conținutul ticketelor pe voice!**"
+    )
+    embed = discord.Embed(description=text_panou, color=0x2b2d31)
+    await ctx.send(embed=embed, view=TicketView())
+
+@bot.command()
+@is_above_staff()
+async def say(ctx, *, message: str):
+    await ctx.message.delete()
+    await ctx.send(message)
+
+@bot.command()
+async def boost(ctx, member: discord.Member = None):
+    required_role = ctx.guild.get_role(BOOST_ROLE_MIN)
+    if required_role and ctx.author.top_role.position >= required_role.position:
+        await ctx.message.delete()
+        target = member or ctx.author
+        await send_boost_announcement(target, ctx.guild)
+    else:
+        await ctx.send("❌ Nu ai permisiunea necesară!", delete_after=5)
+
+@bot.command()
+@is_above_staff()
+async def slow(ctx, seconds: int):
+    await ctx.channel.edit(slowmode_delay=seconds)
+    await ctx.send(f"⏳ Slowmode setat la **{seconds}** secunde.", delete_after=5)
+    await send_sanction_log("Slowmode", ctx.author, ctx.channel, f"Delay: {seconds}s")
+
+@bot.command()
+@is_staff_up()
+async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
+    if member.top_role >= ctx.author.top_role:
+        return await ctx.send("❌ Nu poți sancționa pe cineva cu grad egal sau mai mare!", delete_after=5)
+    
+    role = ctx.guild.get_role(BAN_ROLE_ID)
+    if role:
+        await member.add_roles(role, reason=reason)
+        await sync_ban_role_permissions(ctx.guild)
+        await ctx.send(f"✅ {member.mention} a primit rolul de Ban și toate canalele au fost ascunse.", delete_after=5)
+        await send_sanction_log("Ban (Role)", ctx.author, member, reason)
+    else:
+        await ctx.send("❌ Rolul de ban nu a fost găsit pe server!", delete_after=5)
+
+@bot.command()
+@is_staff_up()
+async def unban(ctx, id: int):
+    try:
+        user = await bot.fetch_user(id)
+        await ctx.guild.unban(user)
+        await ctx.send(f"✅ {user.name} a primit unban din lista serverului.", delete_after=5)
+        await send_sanction_log("Unban", ctx.author, user)
+    except:
+        member = ctx.guild.get_member(id)
+        if member:
+            role = ctx.guild.get_role(BAN_ROLE_ID)
+            if role in member.roles:
+                await member.remove_roles(role)
+                await ctx.send(f"✅ Rolul de Ban a fost scos lui {member.name}.", delete_after=5)
+                await send_sanction_log("Unban (Role)", ctx.author, member)
+            else:
+                await ctx.send("❌ Acest user nu are rolul de ban sau nu e banat.", delete_after=5)
+
+@bot.command()
+@is_staff_up()
+async def clear(ctx, amount: int):
+    # Verificare daca are unul din rolurile pentru 100 mesaje
+    can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
+    
     limit = 100 if can_clear_100 else 10
-    if amount > limit: return await interaction.response.send_message(f"❌ Max {limit}!", ephemeral=True)
-    await interaction.response.defer(ephemeral=True)
-    deleted = await interaction.channel.purge(limit=amount)
-    await interaction.followup.send(f"🧹 {len(deleted)} mesaje șterse.")
+    
+    if amount > limit:
+        return await ctx.send(f"❌ Poti sterge maxim **{limit}** mesaje!", delete_after=5)
 
-@bot.tree.command(name="warn", description="Warn un membru")
-async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "Nespecificat"):
+    deleted = await ctx.channel.purge(limit=amount)
+    await send_sanction_log("Clear", ctx.author, ctx.channel, f"Mesaje șterse: {len(deleted)}")
+    await ctx.send(f"🧹 {len(deleted)} mesaje șterse.", delete_after=5)
+
+@bot.command()
+@is_staff_up()
+async def lock(ctx):
+    await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+    await ctx.send("🔒 Canal blocat.", delete_after=5)
+    await send_sanction_log("Lock", ctx.author, ctx.channel)
+
+@bot.command()
+@is_above_staff()
+async def unlock(ctx):
+    await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
+    await ctx.send("🔓 Canal deblocat.", delete_after=5)
+    await send_sanction_log("Unlock", ctx.author, ctx.channel)
+
+@bot.command()
+@is_staff_up()
+async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
     data = load_data()
     uid = str(member.id)
     data["warnings"][uid] = data["warnings"].get(uid, 0) + 1
     count = data["warnings"][uid]
     save_data(data)
-    await interaction.response.send_message(f"⚠️ {member.mention} warn {count}/3.")
-    await send_sanction_log(f"Warn {count}/3", interaction.user, member, reason)
+    if count >= 3:
+        try:
+            role = ctx.guild.get_role(BAN_ROLE_ID)
+            if role: 
+                await member.add_roles(role)
+                await sync_ban_role_permissions(ctx.guild)
+            await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
+            await send_sanction_log("Ban (Auto Role)", None, member, reason)
+        except:
+            await ctx.send("❌ Eroare la ban automat.")
+    else:
+        warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
+        if count <= len(warn_roles):
+            role = ctx.guild.get_role(warn_roles[count-1])
+            if role: await member.add_roles(role)
+        await ctx.send(f"⚠️ {member.mention} warn {count}/3.", delete_after=5)
+        await send_sanction_log(f"Warn {count}/3", ctx.author, member, reason)
 
-@bot.tree.command(name="unwarn", description="Resetează warn-uri")
-async def unwarn(interaction: discord.Interaction, member: discord.Member):
+@bot.command()
+@is_staff_up()
+async def unwarn(ctx, member: discord.Member):
     data = load_data()
     uid = str(member.id)
     if uid in data["warnings"]: del data["warnings"][uid]
     save_data(data)
-    await interaction.response.send_message(f"✅ Resetat warn-uri pentru {member.mention}.")
+    for rid in [WARN1_ROLE_ID, W2_ID, W3_ID]:
+        role = ctx.guild.get_role(rid)
+        if role and role in member.roles: await member.remove_roles(role)
+    await ctx.send(f"✅ Warn-urile lui {member.mention} resetate.", delete_after=5)
+    await send_sanction_log("Unwarn", ctx.author, member, "Reset total")
 
-@bot.tree.command(name="invites", description="Vezi invitațiile tale")
-async def invites(interaction: discord.Interaction, member: discord.Member = None):
-    target = member or interaction.user
+@bot.command()
+@is_trial_up()
+async def mute(ctx, member: discord.Member, duration: str, *, reason="Nespecificat"):
+    try:
+        unit = duration[-1].lower()
+        amt = int(duration[:-1])
+        seconds = {"s": amt, "m": amt*60, "h": amt*3600, "d": amt*86400}.get(unit, 3600)
+        await member.timeout(timedelta(seconds=seconds), reason=reason)
+        await ctx.send(f"🔇 {member.mention} mute {duration}.", delete_after=5)
+        await send_sanction_log("Mute", ctx.author, member, reason, duration)
+    except:
+        await ctx.send("❌ Eroare la mute.")
+
+@bot.command()
+@is_trial_up()
+async def unmute(ctx, member: discord.Member):
+    await member.timeout(None)
+    await ctx.send(f"🔊 {member.mention} unmute.", delete_after=5)
+    await send_sanction_log("Unmute", ctx.author, member, "Manual")
+
+# ================= NOILE FUNCȚII INVITE =================
+
+async def get_inviter(member):
+    guild = member.guild
+    before_invs = invites_cache.get(guild.id, {})
+    try:
+        after_invs = await guild.invites()
+    except:
+        return None
+
+    inviter = None
+    for inv in after_invs:
+        if inv.code in before_invs:
+            if inv.uses > before_invs[inv.code]:
+                inviter = inv.inviter
+                break
+        elif inv.uses > 0: 
+            inviter = inv.inviter
+            break
+
+    invites_cache[guild.id] = {inv.code: inv.uses for inv in after_invs}
+    return inviter
+
+@bot.command()
+async def invites(ctx, member: discord.Member = None):
+    if ctx.channel.id != 1436559828859359373:
+        return
+    
+    allowed_role = ctx.guild.get_role(MEMBER_ROLE_ALLOWED)
+    if allowed_role not in ctx.author.roles:
+        return
+
+    target = member or ctx.author
     data = load_data()
     stats = data["invites"].get(str(target.id), {"total": 0, "fake": 0, "leaves": 0})
+    
+    reale = stats["total"]
     embed = discord.Embed(title=f"📩 Invites | {target.name}", color=0x2b2d31)
-    embed.add_field(name="✅ Reale", value=str(stats["total"]))
+    embed.add_field(name="✅ Reale", value=str(reale))
     embed.add_field(name="❌ Fake", value=str(stats["fake"]))
     embed.add_field(name="📤 Plecați", value=str(stats["leaves"]))
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="setup_apply", description="Setup panou aplicații")
-async def setup_apply(interaction: discord.Interaction):
-    await interaction.response.send_message("Panou activat.", ephemeral=True)
-    await interaction.channel.send(embed=discord.Embed(title="✨ RECRUTARE HELPER", description="Aplică folosind butonul."), view=ApplyView())
-
-@bot.tree.command(name="setup_roles", description="Setup panou roluri")
-async def setup_roles(interaction: discord.Interaction):
-    await interaction.response.send_message("Panou roluri activat.", ephemeral=True)
-    await interaction.channel.send(embed=discord.Embed(description="🎭 **ALEGE-ȚI ROLURILE**"), view=SelfRoleView())
-
-@bot.tree.command(name="setup_ticket", description="Setup panou ticket")
-async def setup_ticket(interaction: discord.Interaction):
-    await interaction.response.send_message("Panou ticket activat.", ephemeral=True)
-    await interaction.channel.send(embed=discord.Embed(description="🎫 **TICKETS**"), view=TicketView())
-
-@bot.tree.command(name="avatar", description="Vezi avatarul cuiva")
-async def avatar(interaction: discord.Interaction, member: discord.Member = None):
-    target = member or interaction.user
-    embed = discord.Embed(title=f"Avatar • {target.name}")
-    embed.set_image(url=target.display_avatar.url)
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="serverinfo", description="Info server")
-async def serverinfo(interaction: discord.Interaction):
-    g = interaction.guild
-    embed = discord.Embed(title=f"{g.name}", color=0x2b2d31)
-    embed.add_field(name="Membri", value=g.member_count)
-    embed.add_field(name="Boosts", value=g.premium_subscription_count)
-    await interaction.response.send_message(embed=embed)
+    embed.set_footer(text=f"Total valid: {reale}")
+    
+    msg = await ctx.send(embed=embed)
+    
+    await asyncio.sleep(60)
+    try:
+        await ctx.message.delete()
+        await msg.delete()
+    except: pass
 
 # ================= EVENIMENTE =================
 
 @bot.event
+async def on_guild_channel_create(channel):
+    role = channel.guild.get_role(BAN_ROLE_ID)
+    if role:
+        try:
+            await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+        except:
+            pass
+
+@bot.event
+async def on_member_join(member):
+    inviter = await get_inviter(member)
+    if inviter and not inviter.bot:
+        data = load_data()
+        inv_id = str(inviter.id)
+        if inv_id not in data["invites"]:
+            data["invites"][inv_id] = {"total": 0, "fake": 0, "leaves": 0, "invited_list": []}
+        
+        is_fake = (datetime.datetime.now(UTC) - member.created_at).days < 2
+        log_ch = bot.get_channel(INVITE_LOG_CH_ID)
+        
+        if is_fake:
+            data["invites"][inv_id]["fake"] += 1
+            if log_ch: await log_ch.send(f"⚠️ {member.mention} a intrat (invitat de {inviter.mention}), dar contul este prea nou (**FAKE**).")
+        else:
+            data["invites"][inv_id]["total"] += 1
+            if "invited_list" not in data["invites"][inv_id]: data["invites"][inv_id]["invited_list"] = []
+            data["invites"][inv_id]["invited_list"].append(member.id)
+            if log_ch: await log_ch.send(f"✅ {member.mention} a intrat (invitat de {inviter.mention}). Reale: **{data['invites'][inv_id]['total']}**")
+            
+            if data["invites"][inv_id]["total"] >= 25:
+                role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
+                inv_member = member.guild.get_member(inviter.id)
+                if role and inv_member: await inv_member.add_roles(role)
+        
+        save_data(data)
+
+    channel = bot.get_channel(WELCOME_CH_ID)
+    if not channel: return
+    welcome_msg = (f"🎉 Bun venit, <@&1438997493374255155> {member.mention}\n"
+                  f"Ne bucurăm că ai intrat pe server! 🎁✨\n"
+                  f"Înainte să începi să vorbești cu ceilalți și să explorezi toate canalele, "
+                  f"te rugăm să treci prin verificare și să-ți activezi rolul <@&1438996505964052601>\n\n"
+                  f"Este un pas rapid și ne ajută să menținem comunitatea sigură și plăcută pentru toată lumea. ❄️🤍\n"
+                  f"Dacă ai nevoie de ajutor, nu ezita să întrebi! 💬")
+    embed = discord.Embed(description=welcome_msg, color=0x2b2d31)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_member_remove(member):
+    data = load_data()
+    for inv_id, stats in data["invites"].items():
+        if member.id in stats.get("invited_list", []):
+            stats["invited_list"].remove(member.id)
+            stats["total"] -= 1
+            stats["leaves"] += 1
+            
+            log_ch = bot.get_channel(INVITE_LOG_CH_ID)
+            if log_ch: await log_ch.send(f"📤 {member.name} a părăsit serverul. Invitație scăzută de la <@{inv_id}>. (Total: {stats['total']})")
+            
+            if stats["total"] < 25:
+                role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
+                inv_member = member.guild.get_member(int(inv_id))
+                if role and inv_member and role in inv_member.roles:
+                    await inv_member.remove_roles(role)
+            break
+    save_data(data)
+
+    channel = bot.get_channel(WELCOME_CH_ID)
+    if not channel: return
+    leave_msg = (f"👋 **{member.name}** ai părăsit serverul.\n"
+                f"Ne pare rău să te vedem plecând și îți dorim numai bine mai departe. ❄️✨")
+    embed = discord.Embed(description=leave_msg, color=0x2b2d31)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    log_ch = bot.get_channel(LOG_CH_ID)
+    if not log_ch: return
+    if before.channel is None and after.channel is not None:
+        emb = discord.Embed(title="📥 Voice Join", description=f"{member.mention} a intrat pe {after.channel.mention}", color=0x43b581,timestamp=datetime.datetime.now(UTC))
+        await log_ch.send(emb)
+    elif before.channel is not None and after.channel is None:
+        emb = discord.Embed(title="📤 Voice Leave", description=f"{member.mention} a ieșit de pe **{before.channel.name}**", color=0xf04747, timestamp=datetime.datetime.now(UTC))
+        await log_ch.send(emb)
+
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot: return
+    log_ch = bot.get_channel(LOG_CH_ID)
+    if not log_ch: return
+    emb = discord.Embed(title="🗑️ Mesaj Șters", color=0xff4500, timestamp=datetime.datetime.now(UTC))
+    emb.add_field(name="Autor", value=message.author.mention)
+    emb.add_field(name="Conținut", value=message.content or "Fără text", inline=False)
+    await log_ch.send(embed=emb)
+
+@bot.command()
+@is_staff_up()
+async def addrole(ctx, member: discord.Member, role: discord.Role):
+    if role.position >= ctx.author.top_role.position:
+        return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
+    await member.add_roles(role)
+    if role.id == BAN_ROLE_ID:
+        await sync_ban_role_permissions(ctx.guild)
+    await ctx.send(f"✅ Rol {role.name} adăugat.", delete_after=5)
+    await send_sanction_log("Role Add", ctx.author, member, f"Rol: {role.name}")
+
+@bot.command()
+@is_staff_up()
+async def removerole(ctx, member: discord.Member, role: discord.Role):
+    if role.position >= ctx.author.top_role.position:
+        return await ctx.send("❌ Nu poți scoate un rol ≥ cu al tău!", delete_after=5)
+    await member.remove_roles(role)
+    await ctx.send(f"✅ Rol {role.name} scos.", delete_after=5)
+    await send_sanction_log("Role Remove", ctx.author, member, f"Rol: {role.name}")
+
+@bot.command()
+@is_trial_up()
+async def warns(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    data = load_data()
+    count = data["warnings"].get(str(member.id), 0)
+    await ctx.send(f"🔍 {member.mention} are **{count}/3** warn-uri.", delete_after=8)
+
+@bot.command()
+async def comenzi(ctx):
+    if ctx.channel.id != STAFF_CMD_CHANNEL: 
+        return await ctx.send(f"❌ Doar în <#{STAFF_CMD_CHANNEL}>", delete_after=6)
+    embed = discord.Embed(title="📜 Liste commandes STAFF", color=0x2b2d31, description="Prefix: **#**\n\n**#ban** @user\n**#kick** @user\n**#mute** @user 1h\n**#vmute** @user\n**#unban** ID\n**#unmute** @user\n**#warn** @user\n**#unwarn** @user\n**#warns** @user\n**#clear** 50\n**#lock** / **#unlock**\n**#setup_ticket**\n**#setup_roles**\n**#setup_apply**")
+    await ctx.send(embed=embed)
+
+@bot.command()
+@is_staff_up()
+async def syncban(ctx):
+    await ctx.send("⏳ Sincronizez permisiunile pentru rolul de Ban pe toate canalele...")
+    await sync_ban_role_permissions(ctx.guild)
+    await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal.")
+
+@bot.command()
+async def avatar(ctx, member: discord.Member = None):
+    if ctx.channel.id != BOT_COMMANDS_CH: 
+        return await ctx.send(f"❌ Doar în <#{BOT_COMMANDS_CH}>", delete_after=6)
+    member = member or ctx.author
+    embed = discord.Embed(title=f"Avatar • {member.name}", color=0x2b2d31)
+    embed.set_image(url=member.display_avatar.url)
+    await ctx.send(embed=embed, delete_after=30)
+
+@bot.command()
+async def serverinfo(ctx):
+    if ctx.channel.id != BOT_COMMANDS_CH: 
+        return await ctx.send(f"❌ Doar în <#{BOT_COMMANDS_CH}>", delete_after=6)
+    g = ctx.guild
+    embed = discord.Embed(title=f"{g.name} • Info", color=0x2b2d31)
+    embed.set_thumbnail(url=g.icon.url if g.icon else None)
+    embed.add_field(name="👥 Membri", value=g.member_count)
+    embed.add_field(name="🚀 Boost", value=g.premium_subscription_count)
+    embed.add_field(name="📅 Creat", value=g.created_at.strftime("%d %b %Y"))
+    await ctx.send(embed=embed, delete_after=25)
+
+@bot.event
+async def on_message(message):
+    if message.author.bot or not message.guild: return
+
+    if message.content.startswith("#"):
+        async def delete_msg():
+            await asyncio.sleep(10)
+            try: await message.delete()
+            except: pass
+        bot.loop.create_task(delete_msg())
+
+    if message.type in [discord.MessageType.premium_guild_subscription, discord.MessageType.premium_guild_tier_1, discord.MessageType.premium_guild_tier_2, discord.MessageType.premium_guild_tier_3]:
+        await send_boost_announcement(message.author, message.guild)
+
+    if message.channel.id == CHAT_CHANNEL_ID:
+        low = message.content.lower()
+        if low in ["neata", "neatza", "buna dimineata", "ntz"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Bună dimineața {message.author.mention}, ce mai faci? 😊")
+        elif low in ["nb", "noapte buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Noapte bună {message.author.mention}!")
+        elif low in ["salut", "sall", "ciao", "buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Salut maan {message.author.mention}, ce faci boss?")
+
+    content_low = message.content.lower()
+    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):
+        trial_role = message.guild.get_role(TRIAL_ID)
+        if not (trial_role and message.author.top_role.position >= trial_role.position):
+            try:
+                await message.delete()
+                data = load_data()
+                uid = str(message.author.id)
+                data["warnings"][uid] = data["warnings"].get(uid, 0) + 1
+                count = data["warnings"][uid]
+                save_data(data)
+                await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
+                if count >= 3:
+                    role = message.guild.get_role(BAN_ROLE_ID)
+                    if role: 
+                        await message.author.add_roles(role)
+                        await sync_ban_role_permissions(message.guild)
+                else:
+                    warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
+                    role = message.guild.get_role(warn_roles[count-1])
+                    if role: await message.author.add_roles(role)
+                    await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
+            except: pass
+            return
+
+    await bot.process_commands(message)
+
+@bot.event
 async def on_ready():
     print(f"✅ {bot.user} ONLINE")
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tickets & /commands"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tickets & Helper Apply"))
+    
     for guild in bot.guilds:
         try:
             invs = await guild.invites()
@@ -347,18 +864,25 @@ async def on_ready():
             await sync_ban_role_permissions(guild)
         except: pass
 
-@bot.event
-async def on_member_join(member):
-    channel = bot.get_channel(WELCOME_CH_ID)
-    if channel:
-        embed = discord.Embed(description=f"🎉 Bun venit {member.mention}", color=0x2b2d31)
-        await channel.send(embed=embed)
+    bot.add_view(TicketView())
+    bot.add_view(CloseTicketView())
+    bot.add_view(SelfRoleView())
+    bot.add_view(ApplyView())
+    bot.add_view(ApplyActionView(0))
 
-@bot.event
-async def on_message(message):
-    if message.author.bot: return
-    # Logica de prefix #sync rămâne pentru sincronizare manuală
-    await bot.process_commands(message)
+    channel = bot.get_channel(UPDATE_LOG_CH_ID)
+    if channel:
+        await channel.purge(limit=15)
+        current_time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff0, timestamp=datetime.datetime.now(UTC))
+        embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
+        embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
+        
+        file_path = "bot.py"
+        if os.path.exists(file_path):
+            await channel.send(embed=embed, file=discord.File(file_path))
+        else:
+            await channel.send(embed=embed)
 
 keep_alive()
 bot.run(TOKEN)
