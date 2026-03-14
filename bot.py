@@ -48,7 +48,6 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # ================= CONFIGURARE BOT =================
-# Schimbat la all() pentru a permite tracker-ul de invitații
 intents = discord.Intents.all() 
 
 bot = commands.Bot(command_prefix="#", intents=intents)
@@ -83,13 +82,14 @@ W3_ID = 1450009480417902796
 # NOILE ID-URI PENTRU INVITES
 INVITE_LOG_CH_ID = 1473636271891943456
 INVITE_REWARD_ROLE_ID = 1482140556867010764
-MEMBER_ROLE_ALLOWED = 1438996505964052601 # Rolul care are voie să folosească comanda
+MEMBER_ROLE_ALLOWED = 1438996505964052601 
+
+BAN_ROLE_ID = 1482386779846869094 # Rolul care se dă în loc de ban
 
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
 
-# --- CHANGELOG AUTOMAT ---
 VERSION = "4.8"
 CHANGES_LOG = """
 ✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
@@ -448,48 +448,40 @@ async def slow(ctx, seconds: int):
     await ctx.send(f"⏳ Slowmode setat la **{seconds}** secunde.", delete_after=5)
     await send_sanction_log("Slowmode", ctx.author, ctx.channel, f"Delay: {seconds}s")
 
-# ================= MODIFICARE BAN -> ROLE BAN =================
 @bot.command()
 @is_staff_up()
 async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     if member.top_role >= ctx.author.top_role:
-        return await ctx.send("❌ Nu poți bana pe cineva cu grad egal sau mai mare!", delete_after=5)
+        return await ctx.send("❌ Nu poți sancționa pe cineva cu grad egal sau mai mare!", delete_after=5)
     
-    # Căutăm rolul BANNED sau îl creăm
-    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
-    banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
-    
-    if not banned_role:
-        try:
-            # Creare rol cu permisiuni minime
-            banned_role = await ctx.guild.create_role(name=role_name, color=discord.Color.from_rgb(0,0,0), reason="Sistem Ban Role")
-            # Setăm ca acest rol să nu vadă niciun canal existent (overwrites)
-            for channel in ctx.guild.channels:
-                await channel.set_permissions(banned_role, view_channel=False, send_messages=False, connect=False)
-        except:
-            return await ctx.send("❌ Nu am putut crea rolul de ban!")
-
-    # Scoaterea tuturor rolurilor și adăugarea celui de ban
-    try:
-        await member.edit(roles=[banned_role], reason=f"Banned by {ctx.author}: {reason}")
-        await ctx.send(f"✅ {member.mention} a fost trimis în lista neagră (Role Ban).", delete_after=5)
+    role = ctx.guild.get_role(BAN_ROLE_ID)
+    if role:
+        await member.add_roles(role, reason=reason)
+        await ctx.send(f"✅ {member.mention} a primit rolul de Ban.", delete_after=5)
         await send_sanction_log("Ban (Role)", ctx.author, member, reason)
-    except:
-        await ctx.send("❌ Nu am putut edita rolurile membrului!")
+    else:
+        await ctx.send("❌ Rolul de ban nu a fost găsit pe server!", delete_after=5)
 
 @bot.command()
 @is_staff_up()
-async def unban(ctx, member: discord.Member):
-    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
-    banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
-    if banned_role and banned_role in member.roles:
-        await member.remove_roles(banned_role)
-        await ctx.send(f"✅ {member.mention} a primit unban (rol scos).", delete_after=5)
-        await send_sanction_log("Unban (Role)", ctx.author, member)
-    else:
-        # Păstrăm și varianta clasică pentru ID dacă membrul nu mai e pe server
-        await ctx.send("Membru negăsit cu rolul de ban. Încerc unban clasic pe ID...")
-# =============================================================
+async def unban(ctx, id: int):
+    # Verificăm întâi dacă e ban în lista serverului pentru a menține funcția veche de unban
+    try:
+        user = await bot.fetch_user(id)
+        await ctx.guild.unban(user)
+        await ctx.send(f"✅ {user.name} a primit unban din lista serverului.", delete_after=5)
+        await send_sanction_log("Unban", ctx.author, user)
+    except:
+        # Dacă nu e banat, încercăm să scoatem rolul dacă e pe server
+        member = ctx.guild.get_member(id)
+        if member:
+            role = ctx.guild.get_role(BAN_ROLE_ID)
+            if role in member.roles:
+                await member.remove_roles(role)
+                await ctx.send(f"✅ Rolul de Ban a fost scos lui {member.name}.", delete_after=5)
+                await send_sanction_log("Unban (Role)", ctx.author, member)
+            else:
+                await ctx.send("❌ Acest user nu are rolul de ban sau nu e banat.", delete_after=5)
 
 @bot.command()
 @is_staff_up()
@@ -523,13 +515,10 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
     save_data(data)
     if count >= 3:
         try:
-            # Apelăm logica de ban cu rol la 3 warn-uri
-            role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
-            banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
-            if banned_role:
-                await member.edit(roles=[banned_role])
-            await ctx.send(f"⛔ {member.mention} BAN automat cu ROL (3/3 warns).")
-            await send_sanction_log("Ban Automat (Role)", None, member, reason)
+            role = ctx.guild.get_role(BAN_ROLE_ID)
+            if role: await member.add_roles(role)
+            await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
+            await send_sanction_log("Ban (Auto Role)", None, member, reason)
         except:
             await ctx.send("❌ Eroare la ban automat.")
     else:
@@ -576,7 +565,6 @@ async def unmute(ctx, member: discord.Member):
 # ================= NOILE FUNCȚII INVITE =================
 
 async def get_inviter(member):
-    """Găsește cine a invitat membrul comparând utilizările invitațiilor."""
     guild = member.guild
     before_invs = invites_cache.get(guild.id, {})
     try:
@@ -590,17 +578,15 @@ async def get_inviter(member):
             if inv.uses > before_invs[inv.code]:
                 inviter = inv.inviter
                 break
-        elif inv.uses > 0: # Invitație nouă folosită instant
+        elif inv.uses > 0: 
             inviter = inv.inviter
             break
 
-    # Update cache
     invites_cache[guild.id] = {inv.code: inv.uses for inv in after_invs}
     return inviter
 
 @bot.command()
 async def invites(ctx, member: discord.Member = None):
-    # Verificare canal și rol permise conform cerinței
     if ctx.channel.id != 1436559828859359373:
         return
     
@@ -621,7 +607,6 @@ async def invites(ctx, member: discord.Member = None):
     
     msg = await ctx.send(embed=embed)
     
-    # Auto-ștergere după 1 minut
     await asyncio.sleep(60)
     try:
         await ctx.message.delete()
@@ -632,7 +617,6 @@ async def invites(ctx, member: discord.Member = None):
 
 @bot.event
 async def on_member_join(member):
-    # --- TRACKER INVITE ---
     inviter = await get_inviter(member)
     if inviter and not inviter.bot:
         data = load_data()
@@ -640,7 +624,6 @@ async def on_member_join(member):
         if inv_id not in data["invites"]:
             data["invites"][inv_id] = {"total": 0, "fake": 0, "leaves": 0, "invited_list": []}
         
-        # Verificare FAKE (cont mai nou de 2 zile)
         is_fake = (datetime.datetime.now(UTC) - member.created_at).days < 2
         
         log_ch = bot.get_channel(INVITE_LOG_CH_ID)
@@ -654,7 +637,6 @@ async def on_member_join(member):
             data["invites"][inv_id]["invited_list"].append(member.id)
             if log_ch: await log_ch.send(f"✅ {member.mention} a intrat (invitat de {inviter.mention}). Reale: **{data['invites'][inv_id]['total']}**")
             
-            # Verificare Prag 25
             if data["invites"][inv_id]["total"] >= 25:
                 role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
                 inv_member = member.guild.get_member(inviter.id)
@@ -662,7 +644,6 @@ async def on_member_join(member):
         
         save_data(data)
 
-    # --- WELCOME ORIGINAL ---
     channel = bot.get_channel(WELCOME_CH_ID)
     if not channel: return
     welcome_msg = (f"🎉 Bun venit, <@&1438997493374255155> {member.mention}\n"
@@ -677,7 +658,6 @@ async def on_member_join(member):
 
 @bot.event
 async def on_member_remove(member):
-    # --- TRACKER LEAVE ---
     data = load_data()
     for inv_id, stats in data["invites"].items():
         if member.id in stats.get("invited_list", []):
@@ -688,7 +668,6 @@ async def on_member_remove(member):
             log_ch = bot.get_channel(INVITE_LOG_CH_ID)
             if log_ch: await log_ch.send(f"📤 {member.name} a părăsit serverul. Invitație scăzută de la <@{inv_id}>. (Total: {stats['total']})")
             
-            # Scoate rolul dacă scade sub 25
             if stats["total"] < 25:
                 role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
                 inv_member = member.guild.get_member(int(inv_id))
@@ -697,7 +676,6 @@ async def on_member_remove(member):
             break
     save_data(data)
 
-    # --- LEAVE ORIGINAL ---
     channel = bot.get_channel(WELCOME_CH_ID)
     if not channel: return
     leave_msg = (f"👋 **{member.name}** ai părăsit serverul.\n"
@@ -817,11 +795,8 @@ async def on_message(message):
                 save_data(data)
                 await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
                 if count >= 3:
-                    # Aplicăm rolul de ban în loc de ban-ul clasic
-                    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
-                    banned_role = discord.utils.get(message.guild.roles, name=role_name)
-                    if banned_role:
-                        await message.author.edit(roles=[banned_role])
+                    role = message.guild.get_role(BAN_ROLE_ID)
+                    if role: await message.author.add_roles(role)
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
                     role = message.guild.get_role(warn_roles[count-1])
@@ -851,7 +826,6 @@ async def on_ready():
     print(f"✅ {bot.user} ONLINE")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tickets & Helper Apply"))
     
-    # Init cache la pornire
     for guild in bot.guilds:
         try:
             invs = await guild.invites()
