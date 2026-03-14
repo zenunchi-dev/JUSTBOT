@@ -893,8 +893,7 @@ async def on_message(message):
             await message.channel.send(f"{CUSTOM_EMOJI} Salut maan {message.author.mention}, ce faci boss?")
 
     content_low = message.content.lower()
-    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):
-   trial_role = message.guild.get_role(TRIAL_ID)
+    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):trial_role = message.guild.get_role(TRIAL_ID)
         if not (trial_role and message.author.top_role.position >= trial_role.position):
             try:
                 await message.delete()
