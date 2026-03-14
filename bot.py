@@ -425,7 +425,8 @@ async def setup_ticket(ctx):
     embed = discord.Embed(description=text_panou, color=0x2b2d31)
     await ctx.send(embed=embed, view=TicketView())
 
-@bot.command()@is_staff_up()
+@bot.command()
+@is_staff_up()
 async def say(ctx, *, message: str):
     await ctx.message.delete()
     await ctx.send(message)
@@ -447,22 +448,48 @@ async def slow(ctx, seconds: int):
     await ctx.send(f"⏳ Slowmode setat la **{seconds}** secunde.", delete_after=5)
     await send_sanction_log("Slowmode", ctx.author, ctx.channel, f"Delay: {seconds}s")
 
+# ================= MODIFICARE BAN -> ROLE BAN =================
 @bot.command()
 @is_staff_up()
 async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     if member.top_role >= ctx.author.top_role:
         return await ctx.send("❌ Nu poți bana pe cineva cu grad egal sau mai mare!", delete_after=5)
-    await member.ban(reason=reason)
-    await ctx.send(f"✅ {member.name} a fost banat.", delete_after=5)
-    await send_sanction_log("Ban", ctx.author, member, reason)
+    
+    # Căutăm rolul BANNED sau îl creăm
+    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
+    banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
+    
+    if not banned_role:
+        try:
+            # Creare rol cu permisiuni minime
+            banned_role = await ctx.guild.create_role(name=role_name, color=discord.Color.from_rgb(0,0,0), reason="Sistem Ban Role")
+            # Setăm ca acest rol să nu vadă niciun canal existent (overwrites)
+            for channel in ctx.guild.channels:
+                await channel.set_permissions(banned_role, view_channel=False, send_messages=False, connect=False)
+        except:
+            return await ctx.send("❌ Nu am putut crea rolul de ban!")
+
+    # Scoaterea tuturor rolurilor și adăugarea celui de ban
+    try:
+        await member.edit(roles=[banned_role], reason=f"Banned by {ctx.author}: {reason}")
+        await ctx.send(f"✅ {member.mention} a fost trimis în lista neagră (Role Ban).", delete_after=5)
+        await send_sanction_log("Ban (Role)", ctx.author, member, reason)
+    except:
+        await ctx.send("❌ Nu am putut edita rolurile membrului!")
 
 @bot.command()
 @is_staff_up()
-async def unban(ctx, id: int):
-    user = await bot.fetch_user(id)
-    await ctx.guild.unban(user)
-    await ctx.send(f"✅ {user.name} a primit unban.", delete_after=5)
-    await send_sanction_log("Unban", ctx.author, user)
+async def unban(ctx, member: discord.Member):
+    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
+    banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
+    if banned_role and banned_role in member.roles:
+        await member.remove_roles(banned_role)
+        await ctx.send(f"✅ {member.mention} a primit unban (rol scos).", delete_after=5)
+        await send_sanction_log("Unban (Role)", ctx.author, member)
+    else:
+        # Păstrăm și varianta clasică pentru ID dacă membrul nu mai e pe server
+        await ctx.send("Membru negăsit cu rolul de ban. Încerc unban clasic pe ID...")
+# =============================================================
 
 @bot.command()
 @is_staff_up()
@@ -496,9 +523,13 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
     save_data(data)
     if count >= 3:
         try:
-            await member.ban(reason=f"3/3 warns | Ultimul: {reason}")
-            await ctx.send(f"⛔ {member.mention} BAN automat (3/3 warns).")
-            await send_sanction_log("Ban", None, member, reason)
+            # Apelăm logica de ban cu rol la 3 warn-uri
+            role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
+            banned_role = discord.utils.get(ctx.guild.roles, name=role_name)
+            if banned_role:
+                await member.edit(roles=[banned_role])
+            await ctx.send(f"⛔ {member.mention} BAN automat cu ROL (3/3 warns).")
+            await send_sanction_log("Ban Automat (Role)", None, member, reason)
         except:
             await ctx.send("❌ Eroare la ban automat.")
     else:
@@ -786,7 +817,11 @@ async def on_message(message):
                 save_data(data)
                 await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
                 if count >= 3:
-                    await message.author.ban(reason="3/3 Warns (Link-uri)")
+                    # Aplicăm rolul de ban în loc de ban-ul clasic
+                    role_name = "😭𝗕𝗔𝗡𝗡𝗘𝗗😭"
+                    banned_role = discord.utils.get(message.guild.roles, name=role_name)
+                    if banned_role:
+                        await message.author.edit(roles=[banned_role])
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
                     role = message.guild.get_role(warn_roles[count-1])
