@@ -90,15 +90,31 @@ MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/146184343
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
 
-VERSION = "4.8"
+VERSION = "4.9"
 CHANGES_LOG = """
 ✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
 ✅ **Reward**: Rol automat la 25 de invitații valide.
-✅ **Comenzi**: Adăugată comanda `#invites` cu auto-ștergere (1 min).
+✅ **Ban Role Overwrite**: Rolul de ban blochează acum automat vizibilitatea canalelor.
 """
 
 XP_COOLDOWN = 8
 last_xp_time = {}  
+
+# ================= FUNCȚIE SYNC PERMISIUNI BAN =================
+
+async def sync_ban_role_permissions(guild):
+    """Setează automat permisiunea de a NU vedea canalele pentru rolul de ban."""
+    role = guild.get_role(BAN_ROLE_ID)
+    if not role:
+        return
+    
+    for channel in guild.channels:
+        # Dacă rolul nu are deja suprascrierea de View Channel = False, o setăm
+        if channel.overwrites_for(role).read_messages is not False:
+            try:
+                await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+            except:
+                continue
 
 # ================= CLASE UI PERSISTENTE =================
 
@@ -414,7 +430,7 @@ async def setup_ticket(ctx):
         "🚫 ；**BAN REPORTS**\n"
         "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
         "👑 ；**CONTACT OWNER**\n"
-        "・probleme sau întrebări legate de grade (roluri) și promovări\n"
+        "・probleme sau întrebări  legate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
         "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
         "❓ ；**INFO & OTHERS**\n"
@@ -457,7 +473,9 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     role = ctx.guild.get_role(BAN_ROLE_ID)
     if role:
         await member.add_roles(role, reason=reason)
-        await ctx.send(f"✅ {member.mention} a primit rolul de Ban.", delete_after=5)
+        # Sincronizăm permisiunile pe canale
+        await sync_ban_role_permissions(ctx.guild)
+        await ctx.send(f"✅ {member.mention} a primit rolul de Ban și toate canalele au fost ascunse.", delete_after=5)
         await send_sanction_log("Ban (Role)", ctx.author, member, reason)
     else:
         await ctx.send("❌ Rolul de ban nu a fost găsit pe server!", delete_after=5)
@@ -516,7 +534,9 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
     if count >= 3:
         try:
             role = ctx.guild.get_role(BAN_ROLE_ID)
-            if role: await member.add_roles(role)
+            if role: 
+                await member.add_roles(role)
+                await sync_ban_role_permissions(ctx.guild)
             await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
             await send_sanction_log("Ban (Auto Role)", None, member, reason)
         except:
@@ -616,6 +636,16 @@ async def invites(ctx, member: discord.Member = None):
 # ================= EVENIMENTE =================
 
 @bot.event
+async def on_guild_channel_create(channel):
+    """Când se creează un canal nou, îi punem automat permisiunea de Ban."""
+    role = channel.guild.get_role(BAN_ROLE_ID)
+    if role:
+        try:
+            await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+        except:
+            pass
+
+@bot.event
 async def on_member_join(member):
     inviter = await get_inviter(member)
     if inviter and not inviter.bot:
@@ -711,6 +741,8 @@ async def addrole(ctx, member: discord.Member, role: discord.Role):
     if role.position >= ctx.author.top_role.position:
         return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
     await member.add_roles(role)
+    if role.id == BAN_ROLE_ID:
+        await sync_ban_role_permissions(ctx.guild)
     await ctx.send(f"✅ Rol {role.name} adăugat.", delete_after=5)
     await send_sanction_log("Role Add", ctx.author, member, f"Rol: {role.name}")
 
@@ -737,6 +769,14 @@ async def comenzi(ctx):
         return await ctx.send(f"❌ Doar în <#{STAFF_CMD_CHANNEL}>", delete_after=6)
     embed = discord.Embed(title="📜 Liste commandes STAFF", color=0x2b2d31, description="Prefix: **#**\n\n**#ban** @user\n**#kick** @user\n**#mute** @user 1h\n**#vmute** @user\n**#unban** ID\n**#unmute** @user\n**#warn** @user\n**#unwarn** @user\n**#warns** @user\n**#clear** 50\n**#lock** / **#unlock**\n**#setup_ticket**\n**#setup_roles**\n**#setup_apply**")
     await ctx.send(embed=embed)
+
+@bot.command()
+@is_staff_up()
+async def syncban(ctx):
+    """Comandă manuală pentru a ascunde toate canalele față de rolul de ban."""
+    await ctx.send("⏳ Sincronizez permisiunile pentru rolul de Ban pe toate canalele...")
+    await sync_ban_role_permissions(ctx.guild)
+    await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal.")
 
 @bot.command()
 async def avatar(ctx, member: discord.Member = None):
@@ -796,7 +836,9 @@ async def on_message(message):
                 await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
                 if count >= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
-                    if role: await message.author.add_roles(role)
+                    if role: 
+                        await message.author.add_roles(role)
+                        await sync_ban_role_permissions(message.guild)
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
                     role = message.guild.get_role(warn_roles[count-1])
@@ -830,6 +872,8 @@ async def on_ready():
         try:
             invs = await guild.invites()
             invites_cache[guild.id] = {inv.code: inv.uses for inv in invs}
+            # Sincronizare la pornire
+            await sync_ban_role_permissions(guild)
         except: pass
 
     bot.add_view(TicketView())
