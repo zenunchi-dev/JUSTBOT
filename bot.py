@@ -86,6 +86,13 @@ MEMBER_ROLE_ALLOWED = 1438996505964052601
 
 BAN_ROLE_ID = 1482386779846869094 # Rolul care se dă în loc de ban
 
+# Roluri care pot da clear pana la 100
+CLEAR_100_ROLES = [
+    1437845412383031467, 1411137733975347293, 1436506319459844249,
+    1473101230103330925, 1476422451545116853, 1478173655832727672,
+    1478173861144035449
+]
+
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
@@ -109,7 +116,6 @@ async def sync_ban_role_permissions(guild):
         return
     
     for channel in guild.channels:
-        # Dacă rolul nu are deja suprascrierea de View Channel = False, o setăm
         if channel.overwrites_for(role).read_messages is not False:
             try:
                 await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
@@ -387,7 +393,7 @@ async def vunmute(ctx, member: discord.Member):
     await send_sanction_log("Voice Unmute", ctx.author, member, "Manual")
 
 @bot.command()
-@is_staff_up()
+@is_above_staff()
 async def setup_apply(ctx):
     await ctx.message.delete()
     embed = discord.Embed(
@@ -398,7 +404,7 @@ async def setup_apply(ctx):
     await ctx.send(embed=embed, view=ApplyView())
 
 @bot.command()
-@is_staff_up()
+@is_above_staff()
 async def setup_roles(ctx):
     await ctx.message.delete()
     descriere_panou = (
@@ -419,7 +425,7 @@ async def setup_roles(ctx):
     await ctx.send(embed=embed, view=SelfRoleView())
 
 @bot.command()
-@is_staff_up()
+@is_above_staff()
 async def setup_ticket(ctx):
     await ctx.message.delete()
     text_panou = (
@@ -430,7 +436,7 @@ async def setup_ticket(ctx):
         "🚫 ；**BAN REPORTS**\n"
         "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
         "👑 ；**CONTACT OWNER**\n"
-        "・probleme sau întrebări legate de grade (roluri) și promovări\n"
+        "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
         "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
         "❓ ；**INFO & OTHERS**\n"
@@ -442,7 +448,7 @@ async def setup_ticket(ctx):
     await ctx.send(embed=embed, view=TicketView())
 
 @bot.command()
-@is_staff_up()
+@is_above_staff()
 async def say(ctx, *, message: str):
     await ctx.message.delete()
     await ctx.send(message)
@@ -473,7 +479,6 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     role = ctx.guild.get_role(BAN_ROLE_ID)
     if role:
         await member.add_roles(role, reason=reason)
-        # Sincronizăm permisiunile pe canale
         await sync_ban_role_permissions(ctx.guild)
         await ctx.send(f"✅ {member.mention} a primit rolul de Ban și toate canalele au fost ascunse.", delete_after=5)
         await send_sanction_log("Ban (Role)", ctx.author, member, reason)
@@ -483,14 +488,12 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
 @bot.command()
 @is_staff_up()
 async def unban(ctx, id: int):
-    # Verificăm întâi dacă e ban în lista serverului pentru a menține funcția veche de unban
     try:
         user = await bot.fetch_user(id)
         await ctx.guild.unban(user)
         await ctx.send(f"✅ {user.name} a primit unban din lista serverului.", delete_after=5)
         await send_sanction_log("Unban", ctx.author, user)
     except:
-        # Dacă nu e banat, încercăm să scoatem rolul dacă e pe server
         member = ctx.guild.get_member(id)
         if member:
             role = ctx.guild.get_role(BAN_ROLE_ID)
@@ -503,8 +506,15 @@ async def unban(ctx, id: int):
 
 @bot.command()
 @is_staff_up()
-async def clear(ctx, amount: int = 100):
-    if amount > 500: amount = 500
+async def clear(ctx, amount: int):
+    # Verificare daca are unul din rolurile pentru 100 mesaje
+    can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
+    
+    limit = 100 if can_clear_100 else 10
+    
+    if amount > limit:
+        return await ctx.send(f"❌ Poti sterge maxim **{limit}** mesaje!", delete_after=5)
+
     deleted = await ctx.channel.purge(limit=amount)
     await send_sanction_log("Clear", ctx.author, ctx.channel, f"Mesaje șterse: {len(deleted)}")
     await ctx.send(f"🧹 {len(deleted)} mesaje șterse.", delete_after=5)
@@ -517,7 +527,7 @@ async def lock(ctx):
     await send_sanction_log("Lock", ctx.author, ctx.channel)
 
 @bot.command()
-@is_staff_up()
+@is_above_staff()
 async def unlock(ctx):
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
     await ctx.send("🔓 Canal deblocat.", delete_after=5)
@@ -637,7 +647,6 @@ async def invites(ctx, member: discord.Member = None):
 
 @bot.event
 async def on_guild_channel_create(channel):
-    """Când se creează un canal nou, îi punem automat permisiunea de Ban."""
     role = channel.guild.get_role(BAN_ROLE_ID)
     if role:
         try:
@@ -655,7 +664,6 @@ async def on_member_join(member):
             data["invites"][inv_id] = {"total": 0, "fake": 0, "leaves": 0, "invited_list": []}
         
         is_fake = (datetime.datetime.now(UTC) - member.created_at).days < 2
-        
         log_ch = bot.get_channel(INVITE_LOG_CH_ID)
         
         if is_fake:
@@ -773,7 +781,6 @@ async def comenzi(ctx):
 @bot.command()
 @is_staff_up()
 async def syncban(ctx):
-    """Comandă manuală pentru a ascunde toate canalele față de rolul de ban."""
     await ctx.send("⏳ Sincronizez permisiunile pentru rolul de Ban pe toate canalele...")
     await sync_ban_role_permissions(ctx.guild)
     await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal.")
@@ -872,7 +879,6 @@ async def on_ready():
         try:
             invs = await guild.invites()
             invites_cache[guild.id] = {inv.code: inv.uses for inv in invs}
-            # Sincronizare la pornire
             await sync_ban_role_permissions(guild)
         except: pass
 
@@ -886,7 +892,7 @@ async def on_ready():
     if channel:
         await channel.purge(limit=15)
         current_time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff00, timestamp=datetime.datetime.now(UTC))
+        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff0, timestamp=datetime.datetime.now(UTC))
         embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
         embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
         
