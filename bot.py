@@ -131,7 +131,7 @@ class VerifyView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="Verifică-te", style=discord.ButtonStyle.success, custom_id="verify_button_main", emoji="✅")
-    async def verify(self, interaction: discord.Interaction):
+    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
         neverificat = interaction.guild.get_role(ROLE_NEVERIFICAT)
         verificat = interaction.guild.get_role(ROLE_VERIFICAT)
         
@@ -146,12 +146,13 @@ class VerifyView(discord.ui.View):
             
             # Salvăm statusul pentru sticky
             data = load_data()
+            if "sticky_roles" not in data: data["sticky_roles"] = {}
             data["sticky_roles"][str(interaction.user.id)] = ROLE_VERIFICAT
             save_data(data)
             
             await interaction.response.send_message("✅ Te-ai verificat cu succes!", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Eroare: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Eroare (verifică ierarhia rolurilor): {e}", ephemeral=True)
 
 class SelfRoleView(discord.ui.View):
     def __init__(self):
@@ -895,7 +896,7 @@ async def on_message(message):
                 count = data["warnings"][uid]
                 save_data(data)
                 await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
-                if count >= 3:
+                if count>= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
                         await message.author.add_roles(role)
@@ -903,7 +904,7 @@ async def on_message(message):
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
                     role = message.guild.get_role(warn_roles[count-1])
-                    if role: await member.add_roles(role)
+                    if role: await message.author.add_roles(role)
                     await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
             except: pass
             return
