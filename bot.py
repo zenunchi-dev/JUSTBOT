@@ -20,7 +20,9 @@ def home():
     return "Botul este Online!"
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    # MODIFICARE: Citim portul din variabilele de mediu Railway
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
@@ -353,7 +355,7 @@ async def send_boost_announcement(member, guild):
                         f"📈 | We are now at **{guild.premium_subscription_count}** boosts!\n\n"
                         f"🎁 | Claim your rewards here: <#{BENEFITS_CH_ID}>")
     embed.set_image(url=BOOST_GIF)
-    embed.set_footer(text=f"Server Level: {guild.premium_tier} • We appreciate you!")
+    embed.set_footer(text=f"Server Level: {guild.premium_subscription_count} • We appreciate you!")
     await channel.send(content=content, embed=embed)
 
 async def send_sanction_log(action, staff, member, reason="Nespecificat", duration=None):
