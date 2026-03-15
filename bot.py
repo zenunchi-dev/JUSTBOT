@@ -36,11 +36,11 @@ if not TOKEN:
 def load_data():
     if not os.path.exists("data.json"):
         with open("data.json", "w") as f:
-            json.dump({"warnings": {}, "invites": {}, "verified_users": []}, f)
+            json.dump({"warnings": {}, "invites": {}, "sticky_roles": {}}, f)
     with open("data.json") as f:
         data = json.load(f)
         if "invites" not in data: data["invites"] = {}
-        if "verified_users" not in data: data["verified_users"] = []
+        if "sticky_roles" not in data: data["sticky_roles"] = {}
         return data
 
 def save_data(data):
@@ -79,14 +79,14 @@ WARN1_ROLE_ID = 1436538867850416289
 W2_ID = 1436538789311811624
 W3_ID = 1450009480417902796
 
+# NOILE ID-URI PENTRU VERIFICARE
+ROLE_NEVERIFICAT = 1438997493374255155
+ROLE_VERIFICAT = 1438996505964052601
+
 # NOILE ID-URI PENTRU INVITES
 INVITE_LOG_CH_ID = 1473636271891943456
 INVITE_REWARD_ROLE_ID = 1482140556867010764
 MEMBER_ROLE_ALLOWED = 1438996505964052601 
-
-# ID-URI VERIFICARE (Sticky & Verify)
-UNVERIFIED_ROLE_ID = 1438997493374255155
-VERIFIED_ROLE_ID = 1438996505964052601
 
 BAN_ROLE_ID = 1482386779846869094 # Rolul care se dă în loc de ban
 
@@ -101,10 +101,12 @@ MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/146184343
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
 
-VERSION = "5.0"
+VERSION = "4.9"
 CHANGES_LOG = """
-✅ **Sistem Verificare**: Buton de Verify integrat.
-✅ **Sticky Role**: Rolul Unverified rămâne la re-join.
+✅ **Invite Tracker**: Adăugat sistem de invitații cu verificare fake/real.
+✅ **Reward**: Rol automat la 25 de invitații valide.
+✅ **Ban Role Overwrite**: Rolul de ban blochează acum automat vizibilitatea canalelor.
+✅ **Verification System**: Adăugat buton de verificare și rol sticky.
 """
 
 # ================= FUNCȚIE SYNC PERMISIUNI BAN =================
@@ -128,26 +130,28 @@ class VerifyView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_btn_main")
-    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        unverified_role = interaction.guild.get_role(UNVERIFIED_ROLE_ID)
-        verified_role = interaction.guild.get_role(VERIFIED_ROLE_ID)
+    @discord.ui.button(label="Verifică-te", style=discord.ButtonStyle.success, custom_id="verify_button_main", emoji="✅")
+    async def verify(self, interaction: discord.Interaction):
+        neverificat = interaction.guild.get_role(ROLE_NEVERIFICAT)
+        verificat = interaction.guild.get_role(ROLE_VERIFICAT)
         
-        if verified_role in interaction.user.roles:
+        if verificat in interaction.user.roles:
             return await interaction.response.send_message("Ești deja verificat!", ephemeral=True)
-
-        try:
-            if unverified_role: await interaction.user.remove_roles(unverified_role)
-            if verified_role: await interaction.user.add_roles(verified_role)
             
+        try:
+            if neverificat:
+                await interaction.user.remove_roles(neverificat)
+            if verificat:
+                await interaction.user.add_roles(verificat)
+            
+            # Salvăm statusul pentru sticky
             data = load_data()
-            if interaction.user.id not in data["verified_users"]:
-                data["verified_users"].append(interaction.user.id)
-                save_data(data)
-                
+            data["sticky_roles"][str(interaction.user.id)] = ROLE_VERIFICAT
+            save_data(data)
+            
             await interaction.response.send_message("✅ Te-ai verificat cu succes!", ephemeral=True)
-        except:
-            await interaction.response.send_message("❌ Eroare tehnică la roluri.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Eroare: {e}", ephemeral=True)
 
 class SelfRoleView(discord.ui.View):
     def __init__(self):
@@ -393,16 +397,11 @@ def is_above_staff():
 @bot.command()
 @is_above_staff()
 async def setup_verify(ctx):
-    """Comandă pentru a trimite panoul de verificare cu buton."""
     await ctx.message.delete()
     embed = discord.Embed(
-        title="❄️✨ **BUN VENIT!** ✨❄️",
-        description=(
-            "\n🎯 Pentru a avea **acces complet** la toate canalele și funcțiile serverului:\n"
-            "➡️ **APASĂ** pe butonul de VERIFY 🎁\n\n"
-            "📜 După **VERIFY**, **CITEȘTE** regulamentul aici: 📜 <#1325279589915955321>"
-        ),
-        color=0x2b2d31
+        title="🛡️ Sistem de Verificare",
+        description="Apasă pe butonul de mai jos pentru a primi acces pe server!",
+        color=0x2ecc71
     )
     await ctx.send(embed=embed, view=VerifyView())
 
@@ -476,7 +475,7 @@ async def setup_ticket(ctx):
         "・reclami un membru obișuuit care încalcă regulamentul nostru\n\n"
         "🚫 ；**BAN REPORTS**\n"
         "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
-        "👑 ；**CONTACT OWNER**\n"
+"👑 ；**CONTACT OWNER**\n"
         "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
         "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
@@ -548,7 +547,9 @@ async def unban(ctx, id: int):
 @bot.command()
 @is_staff_up()
 async def clear(ctx, amount: int):
+    # Verificare daca are unul din rolurile pentru 100 mesaje
     can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
+    
     limit = 100 if can_clear_100 else 10
     
     if amount > limit:
@@ -696,14 +697,20 @@ async def on_guild_channel_create(channel):
 @bot.event
 async def on_member_join(member):
     data = load_data()
-    unverif_role = member.guild.get_role(UNVERIFIED_ROLE_ID)
-    verif_role = member.guild.get_role(VERIFIED_ROLE_ID)
+    uid = str(member.id)
     
-    if member.id in data["verified_users"]:
-        if verif_role: await member.add_roles(verif_role)
+    # VERIFICARE STICKY
+    if uid in data.get("sticky_roles", {}) and data["sticky_roles"][uid] == ROLE_VERIFICAT:
+        role_v = member.guild.get_role(ROLE_VERIFICAT)
+        if role_v:
+            await member.add_roles(role_v)
     else:
-        if unverif_role: await member.add_roles(unverif_role)
-    
+        role_n = member.guild.get_role(ROLE_NEVERIFICAT)
+        if role_n:
+            await member.add_roles(role_n)
+            data["sticky_roles"][uid] = ROLE_NEVERIFICAT
+            save_data(data)
+
     inviter = await get_inviter(member)
     if inviter and not inviter.bot:
         inv_id = str(inviter.id)
@@ -891,12 +898,12 @@ async def on_message(message):
                 if count >= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
-                     await message.author.add_roles(role)
+                        await message.author.add_roles(role)
                         await sync_ban_role_permissions(message.guild)
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
                     role = message.guild.get_role(warn_roles[count-1])
-                    if role: await message.author.add_roles(role)
+                    if role: await member.add_roles(role)
                     await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
             except: pass
             return
@@ -920,7 +927,7 @@ async def on_ready():
     bot.add_view(SelfRoleView())
     bot.add_view(ApplyView())
     bot.add_view(ApplyActionView(0))
-    bot.add_view(VerifyView()) 
+    bot.add_view(VerifyView())
 
     channel = bot.get_channel(UPDATE_LOG_CH_ID)
     if channel:
