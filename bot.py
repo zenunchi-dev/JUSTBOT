@@ -12,7 +12,7 @@ from datetime import UTC, timedelta
 from flask import Flask
 from threading import Thread
 
-# ================= KEEP-ALIVE 24/7 =================
+# ================= KEEP-ALIVE 24/7 (MODIFICAT PENTRU RAILWAY) =================
 app = Flask('')
 
 @app.route('/')
@@ -20,12 +20,14 @@ def home():
     return "Botul este Online!"
 
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    # Railway cere folosirea variabilei de mediu PORT
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
-# ===================================================
+# ==============================================================================
 
 # ================= Încărcare token =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -896,15 +898,16 @@ async def on_message(message):
                 count = data["warnings"][uid]
                 save_data(data)
                 await message.author.timeout(timedelta(hours=3), reason="Link neautorizat")
-                if count>= 3:
+                if count >= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
                         await message.author.add_roles(role)
                         await sync_ban_role_permissions(message.guild)
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
-                    role = message.guild.get_role(warn_roles[count-1])
-                    if role: await message.author.add_roles(role)
+                    if count <= len(warn_roles):
+                        role = message.guild.get_role(warn_roles[count-1])
+                        if role: await message.author.add_roles(role)
                     await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
             except: pass
             return
@@ -937,12 +940,7 @@ async def on_ready():
         embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff0, timestamp=datetime.datetime.now(UTC))
         embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
         embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
-        
-        file_path = "bot.py"
-        if os.path.exists(file_path):
-            await channel.send(embed=embed, file=discord.File(file_path))
-        else:
-            await channel.send(embed=embed)
+        await channel.send(embed=embed)
 
 keep_alive()
 bot.run(TOKEN)
