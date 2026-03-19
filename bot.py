@@ -235,6 +235,10 @@ class TicketView(discord.ui.View):
     async def t_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket(interaction, "member")
 
+    @discord.ui.button(label="BAN REPORTS", style=discord.ButtonStyle.secondary, custom_id="t_ban", emoji="🚫")
+    async def t_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.create_ticket(interaction, "ban")
+
     @discord.ui.button(label="CONTACT OWNER", style=discord.ButtonStyle.secondary, custom_id="t_owner", emoji="👑")
     async def t_owner(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket(interaction, "owner")
@@ -242,34 +246,6 @@ class TicketView(discord.ui.View):
     @discord.ui.button(label="INFO & OTHERS", style=discord.ButtonStyle.secondary, custom_id="t_info", emoji="❓")
     async def t_info(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket(interaction, "info")
-
-# CLASA NOUA PENTRU BAN REPORTS SEPARAT
-class BanTicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    async def create_ticket(self, interaction: discord.Interaction, category_name: str):
-        guild = interaction.guild
-        staff_role = guild.get_role(STAFF_ID)
-        channel_name = f"{category_name}-{interaction.user.name.lower()}"
-        existing_channel = discord.utils.get(guild.channels, name=channel_name)
-        if existing_channel:
-            return await interaction.response.send_message(f"❌ Ai deja un ticket deschis: {existing_channel.mention}", ephemeral=True)
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        if staff_role: overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        category = guild.get_channel(TICKET_CATEGORY_ID)
-        channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
-        embed = discord.Embed(title=f"🎫 Ticket: {category_name.upper()}", description=f"Salut {interaction.user.mention}!\nAi deschis un ticket pentru: **{category_name.replace('-', ' ')}**.", color=0x2b2d31)
-        await channel.send(embed=embed, view=CloseTicketView())
-        await interaction.response.send_message(f"✅ Ticket creat: {channel.mention}", ephemeral=True)
-
-    @discord.ui.button(label="BAN REPORTS", style=discord.ButtonStyle.secondary, custom_id="t_ban_sep", emoji="🚫")
-    async def t_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.create_ticket(interaction, "ban")
 
 class CloseTicketView(discord.ui.View):
     def __init__(self):
@@ -498,7 +474,9 @@ async def setup_ticket(ctx):
         "・reclami un membru staff care face abuz sau încalcă regulamentul\n\n"
         "👥 ；**REPORT MEMBER**\n"
         "・reclami un membru obișuuit care încalcă regulamentul nostru\n\n"
-        "👑 ；**CONTACT OWNER**\n"
+        "🚫 ；**BAN REPORTS**\n"
+        "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
+"👑 ；**CONTACT OWNER**\n"
         "・probleme sau întrebărilegate de grade (roluri) și promovări\n"
         "・semnalezi un bug, probleme cu un manager, urgențe\n"
         "・alte probleme pe care staff-ul obișuuit nu le poate rezolva\n\n"
@@ -509,22 +487,6 @@ async def setup_ticket(ctx):
     )
     embed = discord.Embed(description=text_panou, color=0x2b2d31)
     await ctx.send(embed=embed, view=TicketView())
-
-# COMANDA CERUTA #banned
-@bot.command()
-@is_above_staff()
-async def banned(ctx):
-    if ctx.channel.id != 1484317405307080885:
-        return
-    await ctx.message.delete()
-    text_panou = (
-        "🚫 ；**BAN REPORTS**\n"
-        "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
-        "**📢 ；Crearea ticketelor în batjocură/glumă se pedepsește!**\n"
-        "**📢 ；Nu ai voie să partajezi conținutul ticketelor pe voice!**"
-    )
-    embed = discord.Embed(description=text_panou, color=0x2b2d31)
-    await ctx.send(embed=embed, view=BanTicketView())
 
 @bot.command()
 @is_above_staff()
@@ -962,7 +924,6 @@ async def on_ready():
         except: pass
 
     bot.add_view(TicketView())
-    bot.add_view(BanTicketView()) # VIEW PERSISTENT NOU
     bot.add_view(CloseTicketView())
     bot.add_view(SelfRoleView())
     bot.add_view(ApplyView())
