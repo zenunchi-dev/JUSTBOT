@@ -89,6 +89,7 @@ INVITE_REWARD_ROLE_ID = 1482140556867010764
 MEMBER_ROLE_ALLOWED = 1438996505964052601 
 
 BAN_ROLE_ID = 1482386779846869094 # Rolul care se dă în loc de ban
+BANNED_EXEMPT_CHANNEL = 1484317405307080885 # Canalul pe care BAN_ROLE_ID îl poate vedea
 
 # Roluri care pot da clear pana la 100
 CLEAR_100_ROLES = [
@@ -112,17 +113,23 @@ CHANGES_LOG = """
 # ================= FUNCȚIE SYNC PERMISIUNI BAN =================
 
 async def sync_ban_role_permissions(guild):
-    """Setează automat permisiunea de a NU vedea canalele pentru rolul de ban."""
+    """Setează automat permisiunea de a NU vedea canalele pentru rolul de ban, exceptând canalul de appeal."""
     role = guild.get_role(BAN_ROLE_ID)
     if not role:
         return
     
     for channel in guild.channels:
-        if channel.overwrites_for(role).read_messages is not False:
+        if channel.id == BANNED_EXEMPT_CHANNEL:
             try:
-                await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+                await channel.set_permissions(role, view_channel=True, send_messages=True, connect=True)
             except:
                 continue
+        else:
+            if channel.overwrites_for(role).read_messages is not False:
+                try:
+                    await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+                except:
+                    continue
 
 # ================= CLASE UI PERSISTENTE =================
 
@@ -729,10 +736,16 @@ async def invites(ctx, member: discord.Member = None):
 async def on_guild_channel_create(channel):
     role = channel.guild.get_role(BAN_ROLE_ID)
     if role:
-        try:
-            await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
-        except:
-            pass
+        if channel.id == BANNED_EXEMPT_CHANNEL:
+            try:
+                await channel.set_permissions(role, view_channel=True, send_messages=True, connect=True)
+            except:
+                pass
+        else:
+            try:
+                await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+            except:
+                pass
 
 @bot.event
 async def on_member_join(member):
@@ -877,7 +890,7 @@ async def comenzi(ctx):
 async def syncban(ctx):
     await ctx.send("⏳ Sincronizez permisiunile pentru rolul de Ban pe toate canalele...")
     await sync_ban_role_permissions(ctx.guild)
-    await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal.")
+    await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal, exceptând cel de Appeal.")
 
 @bot.command()
 async def avatar(ctx, member: discord.Member = None):
