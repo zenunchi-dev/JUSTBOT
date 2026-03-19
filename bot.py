@@ -565,9 +565,10 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     
     role = ctx.guild.get_role(BAN_ROLE_ID)
     if role:
-        await member.add_roles(role, reason=reason)
+        # SCOATE TOATE ROLURILE ÎNAINTE DE A DA BAN
+        await member.edit(roles=[role], reason=f"Ban: {reason}")
         await sync_ban_role_permissions(ctx.guild)
-        await ctx.send(f"✅ {member.mention} a primit rolul de Ban și toate canalele au fost ascunse.", delete_after=5)
+        await ctx.send(f"✅ {member.mention} a primit rolul de Ban, restul rolurilor au fost scoase și canalele ascunse.", delete_after=5)
         await send_sanction_log("Ban (Role)", ctx.author, member, reason)
     else:
         await ctx.send("❌ Rolul de ban nu a fost găsit pe server!", delete_after=5)
@@ -632,7 +633,8 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
         try:
             role = ctx.guild.get_role(BAN_ROLE_ID)
             if role: 
-                await member.add_roles(role)
+                # SCOATE TOATE ROLURILE LA AUTOMATIC BAN
+                await member.edit(roles=[role], reason="3/3 warns")
                 await sync_ban_role_permissions(ctx.guild)
             await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
             await send_sanction_log("Ban (Auto Role)", None, member, reason)
@@ -855,9 +857,14 @@ async def on_message_delete(message):
 async def addrole(ctx, member: discord.Member, role: discord.Role):
     if role.position >= ctx.author.top_role.position:
         return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
-    await member.add_roles(role)
+    
     if role.id == BAN_ROLE_ID:
+        # SCOATE TOATE ROLURILE DACĂ SE ADĂUGĂ MANUAL ROLUL DE BAN
+        await member.edit(roles=[role], reason="Ban role adăugat manual")
         await sync_ban_role_permissions(ctx.guild)
+    else:
+        await member.add_roles(role)
+        
     await ctx.send(f"✅ Rol {role.name} adăugat.", delete_after=5)
     await send_sanction_log("Role Add", ctx.author, member, f"Rol: {role.name}")
 
@@ -951,7 +958,8 @@ async def on_message(message):
                 if count>= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
-                        await message.author.add_roles(role)
+                        # SCOATE TOATE ROLURILE LA AUTOMATIC BAN DIN CAUZA LINKURILOR
+                        await message.author.edit(roles=[role], reason="3/3 warns (links)")
                         await sync_ban_role_permissions(message.guild)
                 else:
                     warn_roles = [WARN1_ROLE_ID, W2_ID, W3_ID]
