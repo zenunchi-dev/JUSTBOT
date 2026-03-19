@@ -263,7 +263,7 @@ class BanTicketView(discord.ui.View):
         if staff_role: overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         category = guild.get_channel(TICKET_CATEGORY_ID)
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
-        embed = discord.Embed(title=f"🎫 Ticket: {category_name.upper()}", description=f"Salut {interaction.user.mention}!\nAi deschis un ticket pentru: **{category_name.replace('-', ' ')}**.", color=0x2b2d31)
+        embed = discord.Embed(title=f"🎫 Ticket: {category_name.upper()}", description=f"Salut {interaction.user.mention}!\nAi deschis un ticket pentru a discuta despre ban-ul primit. Te rugăm să explici situația și să aștepți un răspuns de la Staff.", color=0x2b2d31)
         await channel.send(embed=embed, view=CloseTicketView())
         await interaction.response.send_message(f"✅ Ticket creat: {channel.mention}", ephemeral=True)
 
@@ -518,8 +518,9 @@ async def banned(ctx):
         return
     await ctx.message.delete()
     text_panou = (
-        "🚫 ；**BAN REPORTS**\n"
-        "・reclami un membru care arată conținut porno/gore sau face expose\n\n"
+        "🚫 ；**BAN REPORTS / APPEAL**\n"
+        "・Dacă ai primit ban și vrei să afli motivul sau consideri că ai fost sancționat pe degeaba, deschide un tichet.\n"
+        "・De asemenea, poți raporta aici membri care încalcă grav regulile (pornografie/gore/expose).\n\n"
         "**📢 ；Crearea ticketelor în batjocură/glumă se pedepsește!**\n"
         "**📢 ；Nu ai voie să partajezi conținutul ticketelor pe voice!**"
     )
@@ -962,7 +963,7 @@ async def on_ready():
         except: pass
 
     bot.add_view(TicketView())
-    bot.add_view(BanTicketView()) # VIEW PERSISTENT NOU
+    bot.add_view(BanTicketView())
     bot.add_view(CloseTicketView())
     bot.add_view(SelfRoleView())
     bot.add_view(ApplyView())
@@ -983,5 +984,4 @@ async def on_ready():
         else:
             await channel.send(embed=embed)
 
-keep_alive()
 bot.run(TOKEN)
