@@ -541,16 +541,6 @@ async def say(ctx, *, message: str):
     await ctx.send(message)
 
 @bot.command()
-async def boost(ctx, member: discord.Member = None):
-    required_role = ctx.guild.get_role(BOOST_ROLE_MIN)
-    if required_role and ctx.author.top_role.position >= required_role.position:
-        await ctx.message.delete()
-        target = member or ctx.author
-        await send_boost_announcement(target, ctx.guild)
-    else:
-        await ctx.send("❌ Nu ai permisiunea necesară!", delete_after=5)
-
-@bot.command()
 @is_above_staff()
 async def slow(ctx, seconds: int):
     await ctx.channel.edit(slowmode_delay=seconds)
