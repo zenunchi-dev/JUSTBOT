@@ -517,6 +517,7 @@ async def setup_ticket(ctx):
     embed = discord.Embed(description=text_panou, color=0x2b2d31)
     await ctx.send(embed=embed, view=TicketView())
 
+# COMANDA CERUTA #banned
 @bot.command()
 @is_above_staff()
 async def banned(ctx):
@@ -539,75 +540,15 @@ async def say(ctx, *, message: str):
     await ctx.message.delete()
     await ctx.send(message)
 
-# ================= MODEL NOU PREMIUM PENTRU NITRO & BOOST (ENGLISH) =================
-
-@bot.command()
-async def nitro(ctx, member: discord.Member = None):
-    await ctx.message.delete()
-    target = member or ctx.author
-    
-    # Folosim joined_at sau premium_since pentru referinta timpului
-    start_date = target.premium_since if target.premium_since else target.joined_at
-    milestones = [1, 2, 3, 6, 9, 12, 15, 18, 24]
-    
-    now = datetime.datetime.now(UTC)
-    diff = now - start_date
-    months_passed = diff.days // 30
-    
-    next_m = next((m for m in milestones if m > months_passed), milestones[-1])
-    next_date = start_date + timedelta(days=next_m * 30)
-    remaining = next_date - now
-    
-    rem_months = remaining.days // 30
-    rem_days = remaining.days % 30
-
-    embed = discord.Embed(title="💠 Nitro Status", color=0xff73fa, timestamp=datetime.datetime.now(UTC))
-    embed.set_author(name=target.display_name, icon_url=target.display_avatar.url)
-    
-    embed.add_field(name="📅 Next Badge Unlocks on:", value=f"**{next_date.strftime('%d %B %Y')}**", inline=False)
-    embed.add_field(name="⏳ Time Remaining:", value=f"`{rem_months} Months` and `{rem_days} Days`", inline=True)
-    embed.add_field(name="🏆 Target Badge:", value=f"`{next_m} Months Badge`", inline=True)
-    
-    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1041001479899320340.webp?size=128&quality=lossless")
-    embed.set_footer(text=f"Requested by {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
-    
-    await ctx.send(embed=embed)
-
 @bot.command()
 async def boost(ctx, member: discord.Member = None):
-    await ctx.message.delete()
-    target = member or ctx.author
-    
-    if not target.premium_since:
-        return await ctx.send(f"❌ **{target.display_name}** is not a server booster!", delete_after=5)
-
-    start_date = target.premium_since
-    milestones = [2, 3, 6, 9, 12, 15, 18, 24]
-    
-    now = datetime.datetime.now(UTC)
-    diff = now - start_date
-    months_passed = diff.days // 30
-    
-    next_m = next((m for m in milestones if m > months_passed), milestones[-1])
-    next_date = start_date + timedelta(days=next_m * 30)
-    remaining = next_date - now
-    
-    rem_months = remaining.days // 30
-    rem_days = remaining.days % 30
-
-    embed = discord.Embed(title="🚀 Server Boost Status", color=0xf47fff, timestamp=datetime.datetime.now(UTC))
-    embed.set_author(name=target.display_name, icon_url=target.display_avatar.url)
-    
-    embed.add_field(name="💎 Next Level Evolution:", value=f"**{next_date.strftime('%d %B %Y')}**", inline=False)
-    embed.add_field(name="⏳ Countdown:", value=f"`{rem_months} Months` & `{rem_days} Days`", inline=True)
-    embed.add_field(name="✨ Milestone:", value=f"`{next_m} Months Boost`", inline=True)
-    
-    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1041001481530904627.webp?size=128&quality=lossless")
-    embed.set_footer(text=f"Keep boosting to level up! | {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
-    
-    await ctx.send(embed=embed)
-
-# ================= RESTUL COMENZILOR TALE =================
+    required_role = ctx.guild.get_role(BOOST_ROLE_MIN)
+    if required_role and ctx.author.top_role.position >= required_role.position:
+        await ctx.message.delete()
+        target = member or ctx.author
+        await send_boost_announcement(target, ctx.guild)
+    else:
+        await ctx.send("❌ Nu ai permisiunea necesară!", delete_after=5)
 
 @bot.command()
 @is_above_staff()
@@ -624,6 +565,7 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     
     role = ctx.guild.get_role(BAN_ROLE_ID)
     if role:
+        # SCOATE TOATE ROLURILE ÎNAINTE DE A DA BAN
         await member.edit(roles=[role], reason=f"Ban: {reason}")
         await sync_ban_role_permissions(ctx.guild)
         await ctx.send(f"✅ {member.mention} a primit rolul de Ban, restul rolurilor au fost scoase și canalele ascunse.", delete_after=5)
@@ -653,8 +595,11 @@ async def unban(ctx, id: int):
 @bot.command()
 @is_staff_up()
 async def clear(ctx, amount: int):
+    # Verificare daca are unul din rolurile pentru 100 mesaje
     can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
+    
     limit = 100 if can_clear_100 else 10
+    
     if amount > limit:
         return await ctx.send(f"❌ Poti sterge maxim **{limit}** mesaje!", delete_after=5)
 
@@ -688,6 +633,7 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
         try:
             role = ctx.guild.get_role(BAN_ROLE_ID)
             if role: 
+                # SCOATE TOATE ROLURILE LA AUTOMATIC BAN
                 await member.edit(roles=[role], reason="3/3 warns")
                 await sync_ban_role_permissions(ctx.guild)
             await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
@@ -735,6 +681,8 @@ async def unmute(ctx, member: discord.Member):
     await ctx.send(f"🔊 {member.mention} unmute.", delete_after=5)
     await send_sanction_log("Unmute", ctx.author, member, "Manual")
 
+# ================= NOILE FUNCȚII INVITE =================
+
 async def get_inviter(member):
     guild = member.guild
     before_invs = invites_cache.get(guild.id, {})
@@ -777,30 +725,40 @@ async def invites(ctx, member: discord.Member = None):
     embed.set_footer(text=f"Total valid: {reale}")
     
     msg = await ctx.send(embed=embed)
+    
     await asyncio.sleep(60)
     try:
         await ctx.message.delete()
         await msg.delete()
     except: pass
 
+# ================= EVENIMENTE =================
+
 @bot.event
 async def on_guild_channel_create(channel):
     role = channel.guild.get_role(BAN_ROLE_ID)
     if role:
         if channel.id == BANNED_EXEMPT_CHANNEL:
-            try: await channel.set_permissions(role, view_channel=True, send_messages=True, connect=True)
-            except: pass
+            try:
+                await channel.set_permissions(role, view_channel=True, send_messages=True, connect=True)
+            except:
+                pass
         else:
-            try: await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
-            except: pass
+            try:
+                await channel.set_permissions(role, view_channel=False, send_messages=False, connect=False)
+            except:
+                pass
 
 @bot.event
 async def on_member_join(member):
     data = load_data()
     uid = str(member.id)
+    
+    # VERIFICARE STICKY
     if uid in data.get("sticky_roles", {}) and data["sticky_roles"][uid] == ROLE_VERIFICAT:
         role_v = member.guild.get_role(ROLE_VERIFICAT)
-        if role_v: await member.add_roles(role_v)
+        if role_v:
+            await member.add_roles(role_v)
     else:
         role_n = member.guild.get_role(ROLE_NEVERIFICAT)
         if role_n:
@@ -816,6 +774,7 @@ async def on_member_join(member):
         
         is_fake = (datetime.datetime.now(UTC) - member.created_at).days < 2
         log_ch = bot.get_channel(INVITE_LOG_CH_ID)
+        
         if is_fake:
             data["invites"][inv_id]["fake"] += 1
             if log_ch: await log_ch.send(f"⚠️ {member.mention} a intrat (invitat de {inviter.mention}), dar contul este prea nou (**FAKE**).")
@@ -824,10 +783,12 @@ async def on_member_join(member):
             if "invited_list" not in data["invites"][inv_id]: data["invites"][inv_id]["invited_list"] = []
             data["invites"][inv_id]["invited_list"].append(member.id)
             if log_ch: await log_ch.send(f"✅ {member.mention} a intrat (invitat de {inviter.mention}). Reale: **{data['invites'][inv_id]['total']}**")
+            
             if data["invites"][inv_id]["total"] >= 25:
                 role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
                 inv_member = member.guild.get_member(inviter.id)
                 if role and inv_member: await inv_member.add_roles(role)
+        
         save_data(data)
 
     channel = bot.get_channel(WELCOME_CH_ID)
@@ -835,7 +796,9 @@ async def on_member_join(member):
     welcome_msg = (f"🎉 Bun venit, <@&1438997493374255155> {member.mention}\n"
                   f"Ne bucurăm că ai intrat pe server! 🎁✨\n"
                   f"Înainte să începi să vorbești cu ceilalți și să explorezi toate canalele, "
-                  f"te rugăm să treci prin verificare și să-ți activezi rolul <@&1438996505964052601>")
+                  f"te rugăm să treci prin verificare și să-ți activezi rolul <@&1438996505964052601>\n\n"
+                  f"Este un pas rapid și ne ajută să menținem comunitatea sigură și plăcută pentru toată lumea. ❄️🤍\n"
+                  f"Dacă ai nevoie de ajutor, nu ezita să întrebi! 💬")
     embed = discord.Embed(description=welcome_msg, color=0x2b2d31)
     embed.set_thumbnail(url=member.display_avatar.url)
     await channel.send(embed=embed)
@@ -848,8 +811,10 @@ async def on_member_remove(member):
             stats["invited_list"].remove(member.id)
             stats["total"] -= 1
             stats["leaves"] += 1
+            
             log_ch = bot.get_channel(INVITE_LOG_CH_ID)
-            if log_ch: await log_ch.send(f"📤 {member.name} a părăsit serverul. Invitație scăzută de la <@{inv_id}>.")
+            if log_ch: await log_ch.send(f"📤 {member.name} a părăsit serverul. Invitație scăzută de la <@{inv_id}>. (Total: {stats['total']})")
+            
             if stats["total"] < 25:
                 role = member.guild.get_role(INVITE_REWARD_ROLE_ID)
                 inv_member = member.guild.get_member(int(inv_id))
@@ -858,16 +823,24 @@ async def on_member_remove(member):
             break
     save_data(data)
 
+    channel = bot.get_channel(WELCOME_CH_ID)
+    if not channel: return
+    leave_msg = (f"👋 **{member.name}** ai părăsit serverul.\n"
+                f"Ne pare rău să te vedem plecând și îți dorim numai bine mai departe. ❄️✨")
+    embed = discord.Embed(description=leave_msg, color=0x2b2d31)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    await channel.send(embed=embed)
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     log_ch = bot.get_channel(LOG_CH_ID)
     if not log_ch: return
     if before.channel is None and after.channel is not None:
         emb = discord.Embed(title="📥 Voice Join", description=f"{member.mention} a intrat pe {after.channel.mention}", color=0x43b581,timestamp=datetime.datetime.now(UTC))
-        await log_ch.send(embed=emb)
+        await log_ch.send(emb)
     elif before.channel is not None and after.channel is None:
         emb = discord.Embed(title="📤 Voice Leave", description=f"{member.mention} a ieșit de pe **{before.channel.name}**", color=0xf04747, timestamp=datetime.datetime.now(UTC))
-        await log_ch.send(embed=emb)
+        await log_ch.send(emb)
 
 @bot.event
 async def on_message_delete(message):
@@ -884,11 +857,14 @@ async def on_message_delete(message):
 async def addrole(ctx, member: discord.Member, role: discord.Role):
     if role.position >= ctx.author.top_role.position:
         return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
+    
     if role.id == BAN_ROLE_ID:
+        # SCOATE TOATE ROLURILE DACĂ SE ADĂUGĂ MANUAL ROLUL DE BAN
         await member.edit(roles=[role], reason="Ban role adăugat manual")
         await sync_ban_role_permissions(ctx.guild)
     else:
         await member.add_roles(role)
+        
     await ctx.send(f"✅ Rol {role.name} adăugat.", delete_after=5)
     await send_sanction_log("Role Add", ctx.author, member, f"Rol: {role.name}")
 
@@ -921,7 +897,7 @@ async def comenzi(ctx):
 async def syncban(ctx):
     await ctx.send("⏳ Sincronizez permisiunile pentru rolul de Ban pe toate canalele...")
     await sync_ban_role_permissions(ctx.guild)
-    await ctx.send("✅ Sincronizare finalizată!")
+    await ctx.send("✅ Sincronizare finalizată! Rolul de Ban nu mai vede niciun canal, exceptând cel de Appeal.")
 
 @bot.command()
 async def avatar(ctx, member: discord.Member = None):
@@ -947,6 +923,7 @@ async def serverinfo(ctx):
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild: return
+
     if message.content.startswith("#"):
         async def delete_msg():
             await asyncio.sleep(10)
@@ -959,13 +936,15 @@ async def on_message(message):
 
     if message.channel.id == CHAT_CHANNEL_ID:
         low = message.content.lower()
-        if low in ["neata", "neatza", "buna dimineata"]:
-            await message.channel.send(f"{CUSTOM_EMOJI} Bună dimineața {message.author.mention}!")
-        elif low in ["salut", "sall"]:
-            await message.channel.send(f"{CUSTOM_EMOJI} Salut {message.author.mention}!")
+        if low in ["neata", "neatza", "buna dimineata", "ntz"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Bună dimineața {message.author.mention}, ce mai faci? 😊")
+        elif low in ["nb", "noapte buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Noapte bună {message.author.mention}!")
+        elif low in ["salut", "sall", "ciao", "buna"]:
+            await message.channel.send(f"{CUSTOM_EMOJI} Salut maan {message.author.mention}, ce faci boss?")
 
     content_low = message.content.lower()
-    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "imgur.com"]):
+    if ("http" in content_low or "discord.gg/" in content_low) and not any(x in content_low for x in ["youtube.com", "youtu.be", "googleusercontent.com", "imgur.com"]):
         trial_role = message.guild.get_role(TRIAL_ID)
         if not (trial_role and message.author.top_role.position >= trial_role.position):
             try:
@@ -979,6 +958,7 @@ async def on_message(message):
                 if count>= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
+                        # SCOATE TOATE ROLURILE LA AUTOMATIC BAN DIN CAUZA LINKURILOR
                         await message.author.edit(roles=[role], reason="3/3 warns (links)")
                         await sync_ban_role_permissions(message.guild)
                 else:
@@ -988,18 +968,21 @@ async def on_message(message):
                     await message.channel.send(f"❌ {message.author.mention} link interzis -> warn **{count}/3**", delete_after=10)
             except: pass
             return
+
     await bot.process_commands(message)
 
 @bot.event
 async def on_ready():
     print(f"✅ {bot.user} ONLINE")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Tickets & Helper Apply"))
+    
     for guild in bot.guilds:
         try:
             invs = await guild.invites()
             invites_cache[guild.id] = {inv.code: inv.uses for inv in invs}
             await sync_ban_role_permissions(guild)
         except: pass
+
     bot.add_view(TicketView())
     bot.add_view(BanTicketView())
     bot.add_view(CloseTicketView())
@@ -1007,5 +990,19 @@ async def on_ready():
     bot.add_view(ApplyView())
     bot.add_view(ApplyActionView(0))
     bot.add_view(VerifyView())
+
+    channel = bot.get_channel(UPDATE_LOG_CH_ID)
+    if channel:
+        await channel.purge(limit=15)
+        current_time = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        embed = discord.Embed(title=f"🚀 Versiunea {VERSION} este activă!", color=0x00ff0, timestamp=datetime.datetime.now(UTC))
+        embed.add_field(name="📅 Data & Ora", value=current_time, inline=True)
+        embed.add_field(name="📝 Ce s-a modificat:", value=CHANGES_LOG, inline=False)
+        
+        file_path = "bot.py"
+        if os.path.exists(file_path):
+            await channel.send(embed=embed, file=discord.File(file_path))
+        else:
+            await channel.send(embed=embed)
 
 bot.run(TOKEN)
