@@ -98,9 +98,6 @@ CLEAR_100_ROLES = [
     1478173861144035449
 ]
 
-# NITRO / BOOST SYSTEM
-NITRO_CHANNEL_ID = 1436559828859359373
-
 MY_GIF = "https://media.discordapp.net/attachments/1440112412266205194/1461843437694484684/f63ce9f5-d6b6-47d9-91f0-eb1e166ab02a.gif"
 BOOST_GIF = "https://media.tenor.com/7123Lof2_mEAAAAC/make-it-rain-money.gif"
 CUSTOM_EMOJI = "<:emoji_16:1448074879961268451>"
@@ -116,6 +113,7 @@ CHANGES_LOG = """
 # ================= FUNCȚIE SYNC PERMISIUNI BAN =================
 
 async def sync_ban_role_permissions(guild):
+    """Setează automat permisiunea de a NU vedea canalele pentru rolul de ban, exceptând canalul de appeal."""
     role = guild.get_role(BAN_ROLE_ID)
     if not role:
         return
@@ -153,6 +151,7 @@ class VerifyView(discord.ui.View):
             if verificat:
                 await interaction.user.add_roles(verificat)
             
+            # Salvăm statusul pentru sticky
             data = load_data()
             if "sticky_roles" not in data: data["sticky_roles"] = {}
             data["sticky_roles"][str(interaction.user.id)] = ROLE_VERIFICAT
@@ -251,6 +250,7 @@ class TicketView(discord.ui.View):
     async def t_info(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.create_ticket(interaction, "info")
 
+# CLASA NOUA PENTRU BAN REPORTS SEPARAT
 class BanTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -288,6 +288,8 @@ class CloseTicketView(discord.ui.View):
         await asyncio.sleep(5)
         try: await interaction.channel.delete()
         except: pass
+
+# ================= SISTEM APPLY =================
 
 class ApplyActionView(discord.ui.View):
     def __init__(self, applicant_id: int):
@@ -402,46 +404,6 @@ async def send_sanction_log(action, staff, member, reason="Nespecificat", durati
     embed.set_footer(text=f"ID: {member.id if hasattr(member, 'id') else 'N/A'}")
     await channel.send(embed=embed)
 
-# ================= NITRO / BOOST MILESTONE SYSTEM=================
-NITRO_MILESTONES = [
-    (1, "Bronze", "1 Lună"), (3, "Silver", "3 Luni"), (6, "Gold", "6 Luni"),
-    (12, "Platinum", "1 An"), (24, "Diamond", "2 Ani"), (36, "Emerald", "3 Ani"),
-    (60, "Ruby", "5 Ani"), (72, "Opal", "6+ Ani")
-]
-
-def calculate_nitro_progress(start_date_str):
-    try:
-        start = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        today = datetime.date.today()
-        days = (today - start).days
-        months = days // 30
-
-        current = "Fără badge"
-        next_badge = "Bronze"
-        next_req = 1
-        for req, name, label in NITRO_MILESTONES:
-            if months >= req:
-                current = name
-            else:
-                next_badge = name
-                next_req = req
-                break
-        else:
-            next_badge = "Opal+"
-
-        days_left = max(0, (next_req * 30) - days)
-        next_date = (start + timedelta(days=next_req * 30)).strftime("%Y-%m-%d")
-
-        return {
-            "months": months,
-            "current": current,
-            "next": next_badge,
-            "days_left": days_left,
-            "next_date": next_date
-        }
-    except:
-        return None
-
 # ================= VERIFICĂRI PERMISIUNI =================
 
 def is_trial_up():
@@ -555,6 +517,7 @@ async def setup_ticket(ctx):
     embed = discord.Embed(description=text_panou, color=0x2b2d31)
     await ctx.send(embed=embed, view=TicketView())
 
+# COMANDA CERUTA #banned
 @bot.command()
 @is_above_staff()
 async def banned(ctx):
@@ -592,6 +555,7 @@ async def ban(ctx, member: discord.Member, *, reason="Nespecificat"):
     
     role = ctx.guild.get_role(BAN_ROLE_ID)
     if role:
+        # SCOATE TOATE ROLURILE ÎNAINTE DE A DA BAN
         await member.edit(roles=[role], reason=f"Ban: {reason}")
         await sync_ban_role_permissions(ctx.guild)
         await ctx.send(f"✅ {member.mention} a primit rolul de Ban, restul rolurilor au fost scoase și canalele ascunse.", delete_after=5)
@@ -621,11 +585,13 @@ async def unban(ctx, id: int):
 @bot.command()
 @is_staff_up()
 async def clear(ctx, amount: int):
+    # Verificare daca are unul din rolurile pentru 100 mesaje
     can_clear_100 = any(role.id in CLEAR_100_ROLES for role in ctx.author.roles)
+    
     limit = 100 if can_clear_100 else 10
     
     if amount > limit:
-        return await ctx.send(f"❌ Poți șterge maxim **{limit}** mesaje!", delete_after=5)
+        return await ctx.send(f"❌ Poti sterge maxim **{limit}** mesaje!", delete_after=5)
 
     deleted = await ctx.channel.purge(limit=amount)
     await send_sanction_log("Clear", ctx.author, ctx.channel, f"Mesaje șterse: {len(deleted)}")
@@ -657,6 +623,7 @@ async def warn(ctx, member: discord.Member, *, reason="Nespecificat"):
         try:
             role = ctx.guild.get_role(BAN_ROLE_ID)
             if role: 
+                # SCOATE TOATE ROLURILE LA AUTOMATIC BAN
                 await member.edit(roles=[role], reason="3/3 warns")
                 await sync_ban_role_permissions(ctx.guild)
             await ctx.send(f"⛔ {member.mention} Ban Role automat (3/3 warns).")
@@ -703,6 +670,8 @@ async def unmute(ctx, member: discord.Member):
     await member.timeout(None)
     await ctx.send(f"🔊 {member.mention} unmute.", delete_after=5)
     await send_sanction_log("Unmute", ctx.author, member, "Manual")
+
+# ================= NOILE FUNCȚII INVITE =================
 
 async def get_inviter(member):
     guild = member.guild
@@ -753,71 +722,6 @@ async def invites(ctx, member: discord.Member = None):
         await msg.delete()
     except: pass
 
-# ================= COMENZI NITRO / BOOST =================
-
-@bot.command()
-@is_staff_up()
-async def setnitro(ctx, member: discord.Member, date: str):
-    if ctx.channel.id != NITRO_CHANNEL_ID:
-        return await ctx.send("❌ Doar pe canalul de comenzi!", delete_after=6)
-
-    try:
-        datetime.datetime.strptime(date, "%Y-%m-%d")
-    except:
-        return await ctx.send("❌ Format greșit! Exemplu: `2025-03-22`", delete_after=10)
-
-    data = load_data()
-    if "nitro_dates" not in data: data["nitro_dates"] = {}
-    data["nitro_dates"][str(member.id)] = date
-    save_data(data)
-    await ctx.send(f"✅ Data boost setată pentru {member.mention}: **{date}**", delete_after=10)
-
-@bot.command(aliases=["boost"])
-async def nitro(ctx, member: discord.Member = None):
-    if ctx.channel.id != NITRO_CHANNEL_ID:
-        return
-
-    target = member or ctx.author
-
-    # Verificăm dacă persoana are boost pe acest server (are rolul de booster)
-    if BOOST_ROLE_MIN not in [r.id for r in target.roles]:
-        return await ctx.send(
-            "❌ Trebuie să dai **boost** acestui server ca să vezi cât mai ai până la următorul badge!\n"
-            "Boost la orice server contează, dar trebuie să-l ai activ aici. 💜",
-            delete_after=12
-        )
-
-    data = load_data()
-    start_date = data.get("nitro_dates", {}).get(str(target.id))
-
-    if not start_date:
-        return await ctx.send(
-            f"❌ {target.mention} nu are data boost setată.\n"
-            f"Staff: `#setnitro @{target.name} AAAA-LL-ZZ`",
-            delete_after=15
-        )
-
-    prog = calculate_nitro_progress(start_date)
-    if not prog:
-        return await ctx.send("❌ Eroare la calcul.", delete_after=6)
-
-    embed = discord.Embed(title=f"🎖️ Nitro Milestones — {target.name}", color=0x5865F2)
-    embed.add_field(name="Timp total", value=f"**{prog['months']} luni**", inline=True)
-    embed.add_field(name="Badge curent", value=prog['current'], inline=True)
-    embed.add_field(name="Următorul badge", value=prog['next'], inline=True)
-    
-    embed.add_field(
-        name="⏳ Până la următorul badge",
-        value=f"**{prog['days_left']} zile**\n`{prog['next_date']}`",
-        inline=False
-    )
-
-    progress_bar = "█" * (prog['months'] // 3) + "░" * (24 - prog['months'] // 3)
-    embed.add_field(name="Progres", value=f"`{progress_bar}`", inline=False)
-    
-    embed.set_footer(text=f"Data boost: {start_date}")
-    await ctx.send(embed=embed, delete_after=90)
-
 # ================= EVENIMENTE =================
 
 @bot.event
@@ -840,6 +744,7 @@ async def on_member_join(member):
     data = load_data()
     uid = str(member.id)
     
+    # VERIFICARE STICKY
     if uid in data.get("sticky_roles", {}) and data["sticky_roles"][uid] == ROLE_VERIFICAT:
         role_v = member.guild.get_role(ROLE_VERIFICAT)
         if role_v:
@@ -944,6 +849,7 @@ async def addrole(ctx, member: discord.Member, role: discord.Role):
         return await ctx.send("❌ Nu poți adăuga un rol ≥ cu al tău!", delete_after=5)
     
     if role.id == BAN_ROLE_ID:
+        # SCOATE TOATE ROLURILE DACĂ SE ADĂUGĂ MANUAL ROLUL DE BAN
         await member.edit(roles=[role], reason="Ban role adăugat manual")
         await sync_ban_role_permissions(ctx.guild)
     else:
@@ -1042,6 +948,7 @@ async def on_message(message):
                 if count>= 3:
                     role = message.guild.get_role(BAN_ROLE_ID)
                     if role: 
+                        # SCOATE TOATE ROLURILE LA AUTOMATIC BAN DIN CAUZA LINKURILOR
                         await message.author.edit(roles=[role], reason="3/3 warns (links)")
                         await sync_ban_role_permissions(message.guild)
                 else:
