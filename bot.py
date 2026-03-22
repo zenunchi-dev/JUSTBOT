@@ -540,15 +540,35 @@ async def say(ctx, *, message: str):
     await ctx.message.delete()
     await ctx.send(message)
 
+# ================= NOILE COMENZI NITRO & BOOST =================
+
+@bot.command()
+async def nitro(ctx, member: discord.Member = None):
+    await ctx.message.delete()
+    target = member or ctx.author
+    embed = discord.Embed(
+        description="**23 Mai 2026 (peste 2 luni)**", 
+        color=0x2b2d31
+    )
+    embed.set_author(name=f"{target.name} a folosit 💠 nitro", icon_url=target.display_avatar.url)
+    embed.set_image(url="https://media.discordapp.net/attachments/1440112412266205194/14843793740266205194/nitro_badge_1.png")
+    embed.set_footer(text="Time remaining until the next badge: 2 months and 2 days\n2026-05-23")
+    await ctx.send(content=f"{target.mention} **a folosit 💠 nitro**", embed=embed)
+
 @bot.command()
 async def boost(ctx, member: discord.Member = None):
-    required_role = ctx.guild.get_role(BOOST_ROLE_MIN)
-    if required_role and ctx.author.top_role.position >= required_role.position:
-        await ctx.message.delete()
-        target = member or ctx.author
-        await send_boost_announcement(target, ctx.guild)
-    else:
-        await ctx.send("❌ Nu ai permisiunea necesară!", delete_after=5)
+    await ctx.message.delete()
+    target = member or ctx.author
+    embed = discord.Embed(
+        description="**23 Mai 2026 (peste 2 luni)**", 
+        color=0x2b2d31
+    )
+    embed.set_author(name=f"{target.name} a folosit 💠 boost", icon_url=target.display_avatar.url)
+    embed.set_image(url="https://media.discordapp.net/attachments/1440112412266205194/14843793740266205194/boost_badge.png")
+    embed.set_footer(text="الوقت المتبقي حتى الشارة التالية: 2 شهرين و 2 يومين\n2026-05-23", icon_url=target.display_avatar.url)
+    await ctx.send(content=f"{target.mention} **a folosit 💠 boost**", embed=embed)
+
+# ================= RESTUL COMENZILOR TALE =================
 
 @bot.command()
 @is_above_staff()
@@ -837,10 +857,10 @@ async def on_voice_state_update(member, before, after):
     if not log_ch: return
     if before.channel is None and after.channel is not None:
         emb = discord.Embed(title="📥 Voice Join", description=f"{member.mention} a intrat pe {after.channel.mention}", color=0x43b581,timestamp=datetime.datetime.now(UTC))
-        await log_ch.send(emb)
+        await log_ch.send(embed=emb)
     elif before.channel is not None and after.channel is None:
         emb = discord.Embed(title="📤 Voice Leave", description=f"{member.mention} a ieșit de pe **{before.channel.name}**", color=0xf04747, timestamp=datetime.datetime.now(UTC))
-        await log_ch.send(emb)
+        await log_ch.send(embed=emb)
 
 @bot.event
 async def on_message_delete(message):
